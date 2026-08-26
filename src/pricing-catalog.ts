@@ -183,7 +183,7 @@ addContextTiered('gemini', 'Gemini 2.5 Pro', GEMINI, ['gemini-2.5-pro'], 200_001
 addFlat('gemini', 'Gemini 2.5 Flash', GEMINI, ['gemini-2.5-flash'], 0.3, 0.03, 2.5, { note: 'Text/image/video rate; audio and cache storage are excluded.' })
 addFlat('gemini', 'Gemini 2.5 Flash-Lite', GEMINI, ['gemini-2.5-flash-lite'], 0.1, 0.01, 0.4, { note: 'Text/image/video rate; audio and cache storage are excluded.' })
 
-const DEEPSEEK = ['deepseek', 'deepseek-api']
+const DEEPSEEK = ['deepseek', 'deepseek-api', 'deepseek-official', 'eliza/deepseek']
 function addDeepSeek(family: string, model: string, offPeak: [number, number, number], peak: [number, number, number]): void {
   add({ source: 'deepseek', family: `${family} · peak`, providers: DEEPSEEK, models: [model], input: peak[0], cacheRead: peak[1], cacheWrite: peak[0], output: peak[2], utcWindows: WEEKDAY_DEEPSEEK_PEAK })
   add({ source: 'deepseek', family: `${family} · off-peak`, providers: DEEPSEEK, models: [model], input: offPeak[0], cacheRead: offPeak[1], cacheWrite: offPeak[0], output: offPeak[2], utcWindows: WEEKDAY_DEEPSEEK_PEAK, outsideUtcWindows: true })

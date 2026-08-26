@@ -61,10 +61,10 @@ Catalog entries: **128**. Generated route rules include provider aliases and con
 | Gemini 2.5 Pro | google, gemini, google-ai | gemini-2.5-pro | $1.25 | $0.125 | $1.25 | $10 | prompt ≤ 200,000 | Cache storage token-hours are excluded. |
 | Gemini 2.5 Flash | google, gemini, google-ai | gemini-2.5-flash | $0.3 | $0.03 | $0.3 | $2.5 | standard | Text/image/video rate; audio and cache storage are excluded. |
 | Gemini 2.5 Flash-Lite | google, gemini, google-ai | gemini-2.5-flash-lite | $0.1 | $0.01 | $0.1 | $0.4 | standard | Text/image/video rate; audio and cache storage are excluded. |
-| DeepSeek V4 Flash · peak | deepseek, deepseek-api | deepseek-v4-flash | $0.44 | $0.014 | $0.44 | $1.32 | inside listed UTC windows |  |
-| DeepSeek V4 Flash · off-peak | deepseek, deepseek-api | deepseek-v4-flash | $0.22 | $0.007 | $0.22 | $0.66 | outside listed UTC windows |  |
-| DeepSeek V4 Pro · peak | deepseek, deepseek-api | deepseek-v4-pro | $1.32 | $0.044 | $1.32 | $3.96 | inside listed UTC windows |  |
-| DeepSeek V4 Pro · off-peak | deepseek, deepseek-api | deepseek-v4-pro | $0.66 | $0.022 | $0.66 | $1.98 | outside listed UTC windows |  |
+| DeepSeek V4 Flash · peak | deepseek, deepseek-api, deepseek-official, eliza/deepseek | deepseek-v4-flash | $0.44 | $0.014 | $0.44 | $1.32 | inside listed UTC windows |  |
+| DeepSeek V4 Flash · off-peak | deepseek, deepseek-api, deepseek-official, eliza/deepseek | deepseek-v4-flash | $0.22 | $0.007 | $0.22 | $0.66 | outside listed UTC windows |  |
+| DeepSeek V4 Pro · peak | deepseek, deepseek-api, deepseek-official, eliza/deepseek | deepseek-v4-pro | $1.32 | $0.044 | $1.32 | $3.96 | inside listed UTC windows |  |
+| DeepSeek V4 Pro · off-peak | deepseek, deepseek-api, deepseek-official, eliza/deepseek | deepseek-v4-pro | $0.66 | $0.022 | $0.66 | $1.98 | outside listed UTC windows |  |
 | DeepSeek Chat legacy | deepseek | deepseek-chat | $0.28 | $0.028 | $0.28 | $0.42 | before 2026-07-24T16:00:00.000Z | Retired after 2026-07-24 15:59 UTC; retained for historical logs. |
 | DeepSeek Reasoner legacy | deepseek | deepseek-reasoner | $0.55 | $0.14 | $0.55 | $2.19 | before 2026-07-24T16:00:00.000Z | Retired after 2026-07-24 15:59 UTC; retained for historical logs. |
 | GLM-5.3 | zai, z-ai, zhipu, bigmodel | glm-5.3 | $1.4 | $0.26 | $1.4 | $4.4 | standard | Global Z.AI endpoint; cached-input storage is currently free. |

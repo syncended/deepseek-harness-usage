@@ -12,6 +12,12 @@ test('client exposes the DSH lazy module and supported navigation slots', () => 
   assert.doesNotMatch(client, /history\.pushState|location\.pathname\s*=/)
 })
 
+test('client dismisses Usage before external navigation clicks proceed', () => {
+  assert.match(client, /document\.addEventListener\("pointerdown", dismissOnExternalNavigation, true\)/)
+  assert.match(client, /\.dsh-usage-sidebar,\.dsh-usage-workspace/)
+  assert.match(client, /disclosure\.close\(\)/)
+})
+
 test('client renders all primary analytics surfaces', () => {
   for (const label of ['Usage trend', 'Token mix', 'Activity', 'Models', 'Estimated spend']) {
     assert.ok(client.includes(label), `missing ${label}`)

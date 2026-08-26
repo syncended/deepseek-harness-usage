@@ -47,6 +47,10 @@ test('catalog selects DeepSeek peak and off-peak UTC rates', () => {
   assert.equal(priceFor('deepseek/deepseek-v4-pro', DEFAULT_PRICING, 10, mondayPeak)?.input, 1.32)
   assert.equal(priceFor('deepseek/deepseek-v4-pro', DEFAULT_PRICING, 10, mondayOffPeak)?.input, 0.66)
   assert.equal(priceFor('deepseek/deepseek-v4-flash', DEFAULT_PRICING, 10, sunday)?.output, 0.66)
+  assert.equal(priceFor('deepseek-official/deepseek-v4-flash', DEFAULT_PRICING, 10, sunday)?.output, 0.66)
+  assert.equal(priceFor('deepseek-official/deepseek-v4-pro', DEFAULT_PRICING, 10, mondayPeak)?.input, 1.32)
+  assert.equal(priceFor('eliza/deepseek/deepseek-v4-flash', DEFAULT_PRICING, 10, sunday)?.cacheRead, 0.007)
+  assert.equal(priceFor('eliza/deepseek/deepseek-v4-pro', DEFAULT_PRICING, 10, mondayOffPeak)?.output, 1.98)
   assert.equal(priceFor('deepseek/deepseek-chat', DEFAULT_PRICING, 10, mondayPeak), undefined)
 })
 
