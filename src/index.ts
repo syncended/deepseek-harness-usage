@@ -28,7 +28,9 @@ const PriceSchema = z.object({
   cacheWrite: z.number().min(0).default(0),
   minPromptTokens: z.number().min(0),
   maxPromptTokens: z.number().min(0),
-  utcWindows: z.array(UtcWindowSchema),
+  // Schemastery arrays default to [], so wrap this optional field in a union
+  // to preserve undefined for ordinary flat/context-tiered prices.
+  utcWindows: z.union([z.array(UtcWindowSchema), z.const(undefined)]),
   outsideUtcWindows: z.boolean(),
   validFrom: z.string(),
   validTo: z.string(),

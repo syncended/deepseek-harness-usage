@@ -8,6 +8,14 @@ import {
   PRICING_SOURCES,
   validatePricing,
 } from '../dist/pricing-catalog.js'
+import { Config } from '../dist/index.js'
+
+test('config schema preserves absent UTC pricing windows', () => {
+  const config = Config({})
+  assert.ok(config.pricing.length > 0)
+  assert.equal(config.pricing.find((price) => price.route === 'openai/gpt-5.6-sol')?.utcWindows, undefined)
+  validatePricing(config.pricing)
+})
 
 test('catalog covers major first-party model providers', () => {
   assert.equal(PRICING_CATALOG_VERIFIED_AT, '2026-08-26')
