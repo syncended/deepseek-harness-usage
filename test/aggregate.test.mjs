@@ -49,6 +49,22 @@ test('extractSessionUsage excludes inherited seed calls and includes compaction 
   ])
 })
 
+test('extractSessionUsage attributes usage to model-call and compaction start times', () => {
+  const meta = { id: 'session-start-times', version: 1, createdAt: day('2026-08-01') }
+  const stepStartedAt = Date.parse('2026-08-24T03:59:59Z')
+  const compactionStartedAt = Date.parse('2026-08-24T05:59:59Z')
+  const events = [
+    event('request/header', 0, stepStartedAt - 1, { reason: 'initial', header: { config: { provider: 'deepseek', model: 'deepseek-v4-pro' } } }),
+    event('step/start', 1, stepStartedAt, { turn: 1, step: 1 }),
+    event('assistant/message', 2, Date.parse('2026-08-24T04:00:01Z'), { turn: 1, step: 1, message: { role: 'assistant', content: [], source: { kind: 'model', provider: 'deepseek', model: 'deepseek-v4-pro' } }, usage: { inputTokens: 10, outputTokens: 1 } }),
+    event('compaction/start', 3, compactionStartedAt, { compactionId: 'compact-start', turn: null }),
+    event('compaction/summary', 4, Date.parse('2026-08-24T06:00:01Z'), { compactionId: 'compact-start', summary: [], shadowedRange: { start: 0, end: 1 }, shadowedSeqs: [0, 1], shadowedTokenCount: 10, provider: 'deepseek', model: 'deepseek-v4-flash', usage: { inputTokens: 20, outputTokens: 2 } }),
+  ]
+
+  const usage = extractSessionUsage(meta, events)
+  assert.deepEqual(usage.records.map((record) => record.timestamp), [stepStartedAt, compactionStartedAt])
+})
+
 test('aggregateUsage builds dense trends, heatmap, model rows, and cost coverage', () => {
   const pricing = [{ route: 'openai-codex/gpt-5*', input: 1, output: 10, cacheRead: 0.1, cacheWrite: 2 }]
   const sessions = [{
@@ -78,5 +94,6 @@ test('priceFor supports case-insensitive star globs', () => {
   const price = { route: 'Provider/gpt-*', input: 1, output: 2, cacheRead: 0, cacheWrite: 0 }
   assert.equal(priceFor('provider/GPT-test', [price]), price)
   assert.equal(priceFor('provider/claude', [price]), undefined)
-  assert.equal(priceFor('openai/gpt-5-mini', DEFAULT_PRICING), undefined)
+  assert.equal(priceFor('openai/gpt-5-mini', DEFAULT_PRICING)?.output, 2)
+  assert.equal(priceFor('openai/gpt-5-mini-custom', DEFAULT_PRICING), undefined)
 })

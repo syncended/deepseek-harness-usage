@@ -55,6 +55,8 @@ function assistantRoute(event: SessionEvent): { provider: string; model: string 
 export function extractSessionUsage(meta: SessionHeader, events: readonly SessionEvent[]): SessionUsage {
   let currentRoute: { provider: string; model: string } | null = null
   const samples = new Map<string, UsageRecord>()
+  const stepStarts = new Map<string, number>()
+  const compactionStarts = new Map<string, number>()
 
   const seedLength = meta.seedLength ?? 0
   for (let index = 0; index < events.length; index += 1) {
@@ -69,12 +71,20 @@ export function extractSessionUsage(meta: SessionHeader, events: readonly Sessio
       continue
     }
     if (index < seedLength) continue
+    if (event.type === 'step/start') {
+      stepStarts.set(`${event.data.turn}:${event.data.step}`, event.time)
+      continue
+    }
+    if (event.type === 'compaction/start') {
+      compactionStarts.set(String(event.data.compactionId), event.time)
+      continue
+    }
 
     if (event.type === 'compaction/summary' && event.data.usage !== undefined) {
       const amount = buckets(event.data.usage)
       samples.set(`compaction:${event.seq}`, {
         sessionId: String(meta.id),
-        timestamp: event.time,
+        timestamp: compactionStarts.get(String(event.data.compactionId)) ?? event.time,
         provider: event.data.provider,
         model: event.data.model,
         ...amount,
@@ -99,9 +109,10 @@ export function extractSessionUsage(meta: SessionHeader, events: readonly Sessio
 
     const amount = buckets(usage)
     const route = assistantRoute(event) ?? currentRoute ?? { provider: 'unknown', model: 'unknown' }
-    samples.set(`${turn}:${step}`, {
+    const sampleKey = `${turn}:${step}`
+    samples.set(sampleKey, {
       sessionId: String(meta.id),
-      timestamp: event.time,
+      timestamp: stepStarts.get(sampleKey) ?? event.time,
       provider: route.provider,
       model: route.model,
       ...amount,
@@ -147,6 +158,7 @@ function datesBetween(start: string, end: string): string[] {
 }
 
 const wildcardRegexCache = new Map<string, RegExp>()
+const pricingBoundaryCache = new Map<string, number>()
 
 function wildcardMatches(pattern: string, value: string): boolean {
   let regex = wildcardRegexCache.get(pattern)
@@ -156,6 +168,22 @@ function wildcardMatches(pattern: string, value: string): boolean {
     wildcardRegexCache.set(pattern, regex)
   }
   return regex.test(value)
+}
+
+function validityMatches(price: ModelPrice, timestamp: number | undefined): boolean {
+  if (price.validFrom === undefined && price.validTo === undefined) return true
+  const instant = timestamp ?? Date.now()
+  if (!Number.isFinite(instant)) return false
+  const boundary = (value: string): number => {
+    let parsed = pricingBoundaryCache.get(value)
+    if (parsed === undefined) {
+      parsed = Date.parse(value)
+      pricingBoundaryCache.set(value, parsed)
+    }
+    return parsed
+  }
+  return (price.validFrom === undefined || instant >= boundary(price.validFrom)) &&
+    (price.validTo === undefined || instant < boundary(price.validTo))
 }
 
 function scheduleMatches(price: ModelPrice, timestamp: number | undefined): boolean {
@@ -180,6 +208,7 @@ export function priceFor(
     wildcardMatches(price.route, route) &&
     (price.minPromptTokens === undefined || promptTokens >= price.minPromptTokens) &&
     (price.maxPromptTokens === undefined || promptTokens <= price.maxPromptTokens) &&
+    validityMatches(price, timestamp) &&
     scheduleMatches(price, timestamp),
   )
 }

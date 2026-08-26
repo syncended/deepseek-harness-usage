@@ -4,6 +4,7 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import { aggregateUsage, DEFAULT_PRICING, extractSessionUsage } from './aggregate.js'
 import { createUsageHttpHandler } from './http.js'
+import { validatePricing } from './pricing-catalog.js'
 import type { ModelPrice, SessionUsage, UsagePluginConfig, UsageRange, UsageSnapshot } from './types.js'
 
 export * from './aggregate.js'
@@ -29,6 +30,8 @@ const PriceSchema = z.object({
   maxPromptTokens: z.number().min(0),
   utcWindows: z.array(UtcWindowSchema),
   outsideUtcWindows: z.boolean(),
+  validFrom: z.string(),
+  validTo: z.string(),
 })
 
 function clonePrice(price: ModelPrice): ModelPrice {
@@ -62,7 +65,9 @@ export class UsageService extends Service {
 
   constructor(ctx: Context, config: UsagePluginConfig) {
     super(ctx, 'usage')
-    this.pricing = (config.pricing ?? DEFAULT_PRICING).map(clonePrice)
+    const pricing = (config.pricing ?? DEFAULT_PRICING).map(clonePrice)
+    validatePricing(pricing)
+    this.pricing = pricing
     this.scanConcurrency = config.scanConcurrency ?? 4
   }
 

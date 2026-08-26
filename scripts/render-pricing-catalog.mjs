@@ -13,6 +13,8 @@ const condition = (entry) => {
   if (entry.minPromptTokens !== undefined) parts.push(`prompt ≥ ${entry.minPromptTokens.toLocaleString('en-US')}`)
   if (entry.maxPromptTokens !== undefined) parts.push(`prompt ≤ ${entry.maxPromptTokens.toLocaleString('en-US')}`)
   if (entry.utcWindows !== undefined) parts.push(entry.outsideUtcWindows ? 'outside listed UTC windows' : 'inside listed UTC windows')
+  if (entry.validFrom !== undefined) parts.push(`from ${entry.validFrom}`)
+  if (entry.validTo !== undefined) parts.push(`before ${entry.validTo}`)
   return parts.join('; ') || 'standard'
 }
 const escape = (value) => String(value).replaceAll('|', '\\|').replaceAll('\n', ' ')
@@ -41,7 +43,8 @@ for (const [provider, url] of Object.entries(PRICING_SOURCES)) {
 lines.push('', '## Accuracy boundaries', '',
   '- Route matching is case-insensitive. Only explicit model aliases and narrowly scoped version-suffix globs are included.',
   '- Prompt length is the sum of uncached input, cache-read, and cache-write buckets reported for a call.',
-  '- DeepSeek V4 peak windows are evaluated from each call timestamp in UTC.',
+  '- DeepSeek V4 peak windows are evaluated from each model-call start timestamp in UTC.',
+  '- Known promotions and retirements use inclusive `validFrom` / exclusive `validTo` instants; calls outside them remain unpriced unless a successor rule is published.',
   '- Anthropic cache writes use the 5-minute rate because Harness usage records do not expose cache TTL.',
   '- Qwen cache reads use the implicit-cache rate; explicit cache hits can be cheaper.',
   '- Unknown routes remain unpriced rather than inheriting a broad family wildcard.',

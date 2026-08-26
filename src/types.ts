@@ -28,6 +28,10 @@ export interface ModelPrice {
   utcWindows?: UtcPricingWindow[]
   /** Match outside utcWindows instead of inside them. */
   outsideUtcWindows?: boolean
+  /** Inclusive ISO-8601 instant when this price becomes valid. */
+  validFrom?: string
+  /** Exclusive ISO-8601 instant when this price stops being valid. */
+  validTo?: string
 }
 
 export interface UsagePluginConfig {

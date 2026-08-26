@@ -30,6 +30,8 @@ export interface PricingCatalogEntry {
   maxPromptTokens?: number
   utcWindows?: UtcPricingWindow[]
   outsideUtcWindows?: boolean
+  validFrom?: string
+  validTo?: string
 }
 
 const WEEKDAY_DEEPSEEK_PEAK: UtcPricingWindow[] = [
@@ -51,7 +53,7 @@ function addFlat(
   input: number,
   cacheRead: number,
   output: number,
-  options: Partial<Pick<PricingCatalogEntry, 'cacheWrite' | 'note'>> = {},
+  options: Partial<Pick<PricingCatalogEntry, 'cacheWrite' | 'note' | 'validFrom' | 'validTo'>> = {},
 ): void {
   add({
     source,
@@ -63,6 +65,8 @@ function addFlat(
     cacheWrite: options.cacheWrite ?? input,
     output,
     ...(options.note === undefined ? {} : { note: options.note }),
+    ...(options.validFrom === undefined ? {} : { validFrom: options.validFrom }),
+    ...(options.validTo === undefined ? {} : { validTo: options.validTo }),
   })
 }
 
@@ -75,6 +79,7 @@ function addContextTiered(
   short: { input: number; cacheRead: number; cacheWrite?: number; output: number },
   long: { input: number; cacheRead: number; cacheWrite?: number; output: number },
   note?: string,
+  validity: Partial<Pick<PricingCatalogEntry, 'validFrom' | 'validTo'>> = {},
 ): void {
   add({
     source,
@@ -87,6 +92,8 @@ function addContextTiered(
     output: long.output,
     minPromptTokens: threshold,
     ...(note === undefined ? {} : { note }),
+    ...(validity.validFrom === undefined ? {} : { validFrom: validity.validFrom }),
+    ...(validity.validTo === undefined ? {} : { validTo: validity.validTo }),
   })
   add({
     source,
@@ -99,6 +106,8 @@ function addContextTiered(
     output: short.output,
     maxPromptTokens: threshold - 1,
     ...(note === undefined ? {} : { note }),
+    ...(validity.validFrom === undefined ? {} : { validFrom: validity.validFrom }),
+    ...(validity.validTo === undefined ? {} : { validTo: validity.validTo }),
   })
 }
 
@@ -106,7 +115,8 @@ const OPENAI = ['openai', 'openai-codex']
 addContextTiered('openai', 'GPT-5.6 Sol', OPENAI, ['gpt-5.6-sol'], 272_000,
   { input: 4, cacheRead: 0.4, cacheWrite: 5, output: 20 },
   { input: 8, cacheRead: 0.8, cacheWrite: 10, output: 30 },
-  'Standard synchronous tier; promotional through at least 2026-11-21.')
+  'Standard synchronous tier; promotional through at least 2026-11-21.',
+  { validFrom: '2026-08-26T00:00:00.000Z', validTo: '2026-11-22T00:00:00.000Z' })
 addContextTiered('openai', 'GPT-5.6 Terra', OPENAI, ['gpt-5.6-terra'], 272_000,
   { input: 2, cacheRead: 0.2, cacheWrite: 2.5, output: 12 },
   { input: 4, cacheRead: 0.4, cacheWrite: 5, output: 18 })
@@ -125,11 +135,15 @@ addContextTiered('openai', 'GPT-5.4 Pro', OPENAI, ['gpt-5.4-pro'], 272_000,
   'No discounted cached-input SKU is published; cached buckets use input price.')
 addFlat('openai', 'GPT-5.4 Mini', OPENAI, ['gpt-5.4-mini'], 0.75, 0.075, 4.5)
 addFlat('openai', 'GPT-5.4 Nano', OPENAI, ['gpt-5.4-nano'], 0.2, 0.02, 1.25)
-addFlat('openai', 'GPT-4.1', OPENAI, ['gpt-4.1'], 2, 0.5, 8)
-addFlat('openai', 'GPT-4.1 Mini', OPENAI, ['gpt-4.1-mini'], 0.4, 0.1, 1.6)
-addFlat('openai', 'GPT-4.1 Nano', OPENAI, ['gpt-4.1-nano'], 0.1, 0.025, 0.4)
-addFlat('openai', 'GPT-4o', OPENAI, ['gpt-4o'], 2.5, 1.25, 10)
-addFlat('openai', 'GPT-4o Mini', OPENAI, ['gpt-4o-mini'], 0.15, 0.075, 0.6)
+addFlat('openai', 'GPT-4.1', OPENAI, ['gpt-4.1', 'gpt-4.1-20*'], 2, 0.5, 8)
+addFlat('openai', 'GPT-4.1 Mini', OPENAI, ['gpt-4.1-mini', 'gpt-4.1-mini-20*'], 0.4, 0.1, 1.6)
+addFlat('openai', 'GPT-4.1 Nano', OPENAI, ['gpt-4.1-nano', 'gpt-4.1-nano-20*'], 0.1, 0.025, 0.4)
+addFlat('openai', 'GPT-5.3 Codex', OPENAI, ['gpt-5.3-codex'], 1.75, 0.175, 14, { note: 'Standard Codex tier.' })
+addFlat('openai', 'GPT-5', OPENAI, ['gpt-5'], 1.25, 0.125, 10, { note: 'Prior-generation exact ID retained for existing sessions.' })
+addFlat('openai', 'GPT-5 Mini', OPENAI, ['gpt-5-mini'], 0.25, 0.025, 2, { note: 'Prior-generation exact ID retained for existing sessions.' })
+addFlat('openai', 'GPT-5 Nano', OPENAI, ['gpt-5-nano'], 0.05, 0.005, 0.4, { note: 'Prior-generation exact ID retained for existing sessions.' })
+addFlat('openai', 'GPT-4o', OPENAI, ['gpt-4o', 'gpt-4o-20*'], 2.5, 1.25, 10)
+addFlat('openai', 'GPT-4o Mini', OPENAI, ['gpt-4o-mini', 'gpt-4o-mini-20*'], 0.15, 0.075, 0.6)
 
 const ANTHROPIC = ['anthropic']
 addFlat('anthropic', 'Claude Fable 5', ANTHROPIC, ['claude-fable-5*'], 10, 1, 50, { cacheWrite: 12.5, note: 'Cache-write estimate uses the standard 5-minute cache rate.' })
@@ -155,8 +169,10 @@ addFlat('anthropic', 'Claude Haiku 4.5', ANTHROPIC, ['claude-haiku-4-5*'], 1, 0.
 addFlat('anthropic', 'Claude Haiku 3.5', ANTHROPIC, ['claude-3-5-haiku*', 'claude-haiku-3-5*'], 0.8, 0.08, 4, { cacheWrite: 1, note: 'Retired on the first-party API; retained for historical logs.' })
 
 const GEMINI = ['google', 'gemini', 'google-ai']
-addFlat('gemini', 'Gemini 3.7 Flash', GEMINI, ['gemini-3.7-flash'], 0.75, 0.075, 3.75, { note: 'Promotional through 2026-12-31; cache storage token-hours are excluded.' })
-addFlat('gemini', 'Gemini 3.6 Flash', GEMINI, ['gemini-3.6-flash'], 0.75, 0.075, 3.75, { note: 'Promotional through 2026-12-31; cache storage token-hours are excluded.' })
+addFlat('gemini', 'Gemini 3.7 Flash', GEMINI, ['gemini-3.7-flash'], 0.75, 0.075, 3.75, { note: 'Promotional through 2026-12-31; cache storage token-hours are excluded.', validFrom: '2026-08-26T00:00:00.000Z', validTo: '2027-01-01T00:00:00.000Z' })
+addFlat('gemini', 'Gemini 3.7 Flash · 2027 rate', GEMINI, ['gemini-3.7-flash'], 1.5, 0.15, 7.5, { note: 'Official rate beginning 2027-01-01; cache storage token-hours are excluded.', validFrom: '2027-01-01T00:00:00.000Z' })
+addFlat('gemini', 'Gemini 3.6 Flash', GEMINI, ['gemini-3.6-flash'], 0.75, 0.075, 3.75, { note: 'Promotional through 2026-12-31; cache storage token-hours are excluded.', validFrom: '2026-08-26T00:00:00.000Z', validTo: '2027-01-01T00:00:00.000Z' })
+addFlat('gemini', 'Gemini 3.6 Flash · 2027 rate', GEMINI, ['gemini-3.6-flash'], 1.5, 0.15, 7.5, { note: 'Official rate beginning 2027-01-01; cache storage token-hours are excluded.', validFrom: '2027-01-01T00:00:00.000Z' })
 addFlat('gemini', 'Gemini 3.5 Flash', GEMINI, ['gemini-3.5-flash'], 1.5, 0.15, 9, { note: 'Cache storage token-hours are excluded.' })
 addFlat('gemini', 'Gemini 3.5 Flash-Lite', GEMINI, ['gemini-3.5-flash-lite'], 0.3, 0.03, 2.5, { note: 'Cache storage token-hours are excluded.' })
 addContextTiered('gemini', 'Gemini 3.1 Pro Preview', GEMINI, ['gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools'], 200_001,
@@ -174,6 +190,8 @@ function addDeepSeek(family: string, model: string, offPeak: [number, number, nu
 }
 addDeepSeek('DeepSeek V4 Flash', 'deepseek-v4-flash', [0.22, 0.007, 0.66], [0.44, 0.014, 1.32])
 addDeepSeek('DeepSeek V4 Pro', 'deepseek-v4-pro', [0.66, 0.022, 1.98], [1.32, 0.044, 3.96])
+addFlat('deepseek', 'DeepSeek Chat legacy', ['deepseek'], ['deepseek-chat'], 0.28, 0.028, 0.42, { note: 'Retired after 2026-07-24 15:59 UTC; retained for historical logs.', validTo: '2026-07-24T16:00:00.000Z' })
+addFlat('deepseek', 'DeepSeek Reasoner legacy', ['deepseek'], ['deepseek-reasoner'], 0.55, 0.14, 2.19, { note: 'Retired after 2026-07-24 15:59 UTC; retained for historical logs.', validTo: '2026-07-24T16:00:00.000Z' })
 
 const ZAI = ['zai', 'z-ai', 'zhipu', 'bigmodel']
 for (const [family, model, input, cacheRead, output] of [
@@ -195,16 +213,16 @@ for (const [family, model, input, cacheRead, output] of [
 ] as const) addFlat('zai', family, ZAI, [model], input, cacheRead, output, { note: 'Global Z.AI endpoint; cached-input storage is currently free.' })
 
 const KIMI = ['kimi', 'moonshot']
-for (const [family, model, input, cacheRead, output, note] of [
-  ['Kimi K3', 'kimi-k3', 3, 0.3, 15, 'Standard realtime tier.'],
-  ['Kimi K2.7 Code', 'kimi-k2.7-code', 0.95, 0.19, 4, 'Standard realtime tier.'],
-  ['Kimi K2.7 Code Highspeed', 'kimi-k2.7-code-highspeed', 1.9, 0.38, 8, 'High-speed serving tier.'],
-  ['Kimi K2.6', 'kimi-k2.6', 0.95, 0.16, 4, 'Standard realtime tier.'],
-  ['Kimi K2.5', 'kimi-k2.5', 0.6, 0.1, 3, 'Scheduled for retirement on 2026-08-31; retained for historical logs.'],
-  ['Moonshot V1 8K', 'moonshot-v1-8k', 0.2, 0.2, 2, 'Scheduled for retirement on 2026-08-31; no cache discount is published.'],
-  ['Moonshot V1 32K', 'moonshot-v1-32k', 1, 1, 3, 'Scheduled for retirement on 2026-08-31; no cache discount is published.'],
-  ['Moonshot V1 128K', 'moonshot-v1-128k', 2, 2, 5, 'Scheduled for retirement on 2026-08-31; no cache discount is published.'],
-] as const) addFlat('kimi', family, KIMI, [model], input, cacheRead, output, { note })
+for (const [family, model, input, cacheRead, output, note, validTo] of [
+  ['Kimi K3', 'kimi-k3', 3, 0.3, 15, 'Standard realtime tier.', undefined],
+  ['Kimi K2.7 Code', 'kimi-k2.7-code', 0.95, 0.19, 4, 'Standard realtime tier.', undefined],
+  ['Kimi K2.7 Code Highspeed', 'kimi-k2.7-code-highspeed', 1.9, 0.38, 8, 'High-speed serving tier.', undefined],
+  ['Kimi K2.6', 'kimi-k2.6', 0.95, 0.16, 4, 'Standard realtime tier.', undefined],
+  ['Kimi K2.5', 'kimi-k2.5', 0.6, 0.1, 3, 'Scheduled for retirement on 2026-08-31; retained for historical logs.', '2026-09-01T00:00:00.000Z'],
+  ['Moonshot V1 8K', 'moonshot-v1-8k', 0.2, 0.2, 2, 'Scheduled for retirement on 2026-08-31; no cache discount is published.', '2026-09-01T00:00:00.000Z'],
+  ['Moonshot V1 32K', 'moonshot-v1-32k', 1, 1, 3, 'Scheduled for retirement on 2026-08-31; no cache discount is published.', '2026-09-01T00:00:00.000Z'],
+  ['Moonshot V1 128K', 'moonshot-v1-128k', 2, 2, 5, 'Scheduled for retirement on 2026-08-31; no cache discount is published.', '2026-09-01T00:00:00.000Z'],
+] as const) addFlat('kimi', family, KIMI, [model], input, cacheRead, output, { note, ...(validTo === undefined ? {} : { validTo }) })
 
 const XAI = ['xai']
 for (const [family, model, shortInput, shortCache, shortOutput, longInput, longCache, longOutput] of [
@@ -222,10 +240,10 @@ for (const [family, model, shortInput, shortCache, shortOutput, longInput, longC
 
 const MISTRAL = ['mistral']
 for (const [family, models, input, output] of [
-  ['Mistral Medium 3.5', ['mistral-medium-3-5', 'mistral-medium-latest'], 1.5, 7.5],
-  ['Mistral Large 3', ['mistral-large-2512', 'mistral-large-latest'], 0.5, 1.5],
-  ['Mistral Small 4', ['mistral-small-2603', 'mistral-small-latest'], 0.15, 0.6],
-  ['Codestral', ['codestral-2508', 'codestral-latest'], 0.3, 0.9],
+  ['Mistral Medium 3.5', ['mistral-medium-3-5'], 1.5, 7.5],
+  ['Mistral Large 3', ['mistral-large-2512'], 0.5, 1.5],
+  ['Mistral Small 4', ['mistral-small-2603'], 0.15, 0.6],
+  ['Codestral', ['codestral-2508'], 0.3, 0.9],
 ] as const) addFlat('mistral', family, MISTRAL, [...models], input, input, output, { note: 'Exact cache discount is not published per model; cached buckets conservatively use input price.' })
 
 const COHERE = ['cohere']
@@ -276,6 +294,41 @@ for (const [family, model, input, cacheRead, cacheWrite, output] of [
 
 export const PRICING_CATALOG: readonly PricingCatalogEntry[] = Object.freeze(entries.map((entry) => Object.freeze({ ...entry })))
 
+export function validatePricing(pricing: readonly ModelPrice[]): void {
+  for (const [index, price] of pricing.entries()) {
+    const label = `pricing[${index}] (${price.route})`
+    if (price.route === '') throw new Error(`${label}: route must not be empty`)
+    for (const [bucket, value] of Object.entries({ input: price.input, output: price.output, cacheRead: price.cacheRead, cacheWrite: price.cacheWrite })) {
+      if (!Number.isFinite(value) || value < 0) throw new Error(`${label}: ${bucket} must be a non-negative finite number`)
+    }
+    for (const [field, value] of [['minPromptTokens', price.minPromptTokens], ['maxPromptTokens', price.maxPromptTokens]] as const) {
+      if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) throw new Error(`${label}: ${field} must be a non-negative safe integer`)
+    }
+    if (price.minPromptTokens !== undefined && price.maxPromptTokens !== undefined && price.minPromptTokens > price.maxPromptTokens) {
+      throw new Error(`${label}: minPromptTokens must not exceed maxPromptTokens`)
+    }
+    if (price.utcWindows !== undefined && price.utcWindows.length === 0) {
+      throw new Error(`${label}: utcWindows requires at least one utcWindow`)
+    }
+    if (price.outsideUtcWindows === true && price.utcWindows === undefined) {
+      throw new Error(`${label}: outsideUtcWindows requires at least one utcWindow`)
+    }
+    for (const window of price.utcWindows ?? []) {
+      if (window.days.length === 0 || new Set(window.days).size !== window.days.length || window.days.some((day) => !Number.isInteger(day) || day < 0 || day > 6)) {
+        throw new Error(`${label}: utcWindow days must be unique integers from 0 through 6`)
+      }
+      if (!Number.isInteger(window.startHour) || !Number.isInteger(window.endHour) || window.startHour < 0 || window.endHour > 24 || window.startHour >= window.endHour) {
+        throw new Error(`${label}: utcWindow requires integer hours with 0 <= startHour < endHour <= 24`)
+      }
+    }
+    const validFrom = price.validFrom === undefined ? undefined : Date.parse(price.validFrom)
+    const validTo = price.validTo === undefined ? undefined : Date.parse(price.validTo)
+    if (validFrom !== undefined && !Number.isFinite(validFrom)) throw new Error(`${label}: validFrom must be ISO-8601`)
+    if (validTo !== undefined && !Number.isFinite(validTo)) throw new Error(`${label}: validTo must be ISO-8601`)
+    if (validFrom !== undefined && validTo !== undefined && validFrom >= validTo) throw new Error(`${label}: validFrom must precede validTo`)
+  }
+}
+
 export const DEFAULT_PRICING: ModelPrice[] = PRICING_CATALOG.flatMap((entry) =>
   entry.providers.flatMap((provider) => entry.models.map((model) => ({
     route: `${provider}/${model}`,
@@ -287,5 +340,9 @@ export const DEFAULT_PRICING: ModelPrice[] = PRICING_CATALOG.flatMap((entry) =>
     ...(entry.maxPromptTokens === undefined ? {} : { maxPromptTokens: entry.maxPromptTokens }),
     ...(entry.utcWindows === undefined ? {} : { utcWindows: entry.utcWindows.map((window) => ({ ...window, days: [...window.days] })) }),
     ...(entry.outsideUtcWindows === undefined ? {} : { outsideUtcWindows: entry.outsideUtcWindows }),
+    ...(entry.validFrom === undefined ? {} : { validFrom: entry.validFrom }),
+    ...(entry.validTo === undefined ? {} : { validTo: entry.validTo }),
   }))),
 )
+
+validatePricing(DEFAULT_PRICING)
