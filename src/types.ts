@@ -1,5 +1,14 @@
 export type UsageRange = '30d' | '90d' | '365d' | 'all'
 
+export interface UtcPricingWindow {
+  /** UTC weekday numbers, Sunday = 0. */
+  days: number[]
+  /** Inclusive UTC hour, 0–23. */
+  startHour: number
+  /** Exclusive UTC hour, 1–24. */
+  endHour: number
+}
+
 export interface ModelPrice {
   /** Provider/model glob. Only `*` is special. */
   route: string
@@ -11,6 +20,14 @@ export interface ModelPrice {
   cacheRead: number
   /** USD per one million cache-write tokens. */
   cacheWrite: number
+  /** Match calls whose total prompt buckets are at least this size. */
+  minPromptTokens?: number
+  /** Match calls whose total prompt buckets are no larger than this size. */
+  maxPromptTokens?: number
+  /** Optional recurring UTC billing windows. */
+  utcWindows?: UtcPricingWindow[]
+  /** Match outside utcWindows instead of inside them. */
+  outsideUtcWindows?: boolean
 }
 
 export interface UsagePluginConfig {

@@ -10,19 +10,9 @@ import type {
   UsageRecord,
   UsageSnapshot,
 } from './types.js'
+import { DEFAULT_PRICING } from './pricing-catalog.js'
 
-/**
- * Built-in public-list-price estimates (USD / 1M tokens).
- * Route rules are deliberately overridable through plugin config.
- */
-export const DEFAULT_PRICING: ModelPrice[] = [
-  { route: 'openai-codex/gpt-5', input: 1.25, output: 10, cacheRead: 0.125, cacheWrite: 1.25 },
-  { route: 'openai/gpt-5', input: 1.25, output: 10, cacheRead: 0.125, cacheWrite: 1.25 },
-  { route: 'anthropic/claude-sonnet-4-20250514', input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
-  { route: 'anthropic/claude-opus-4-20250514', input: 15, output: 75, cacheRead: 1.5, cacheWrite: 18.75 },
-  { route: 'deepseek/deepseek-chat', input: 0.28, output: 0.42, cacheRead: 0.028, cacheWrite: 0.28 },
-  { route: 'deepseek/deepseek-reasoner', input: 0.55, output: 2.19, cacheRead: 0.14, cacheWrite: 0.55 },
-]
+export { DEFAULT_PRICING } from './pricing-catalog.js'
 
 const DAY_MS = 86_400_000
 const dateFormatterCache = new Map<string, Intl.DateTimeFormat>()
@@ -156,13 +146,42 @@ function datesBetween(start: string, end: string): string[] {
   return Array.from({ length: days + 1 }, (_, index) => shiftDate(start, index))
 }
 
+const wildcardRegexCache = new Map<string, RegExp>()
+
 function wildcardMatches(pattern: string, value: string): boolean {
-  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')
-  return new RegExp(`^${escaped}$`, 'i').test(value)
+  let regex = wildcardRegexCache.get(pattern)
+  if (regex === undefined) {
+    const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')
+    regex = new RegExp(`^${escaped}$`, 'i')
+    wildcardRegexCache.set(pattern, regex)
+  }
+  return regex.test(value)
 }
 
-export function priceFor(route: string, pricing: readonly ModelPrice[]): ModelPrice | undefined {
-  return pricing.find((price) => wildcardMatches(price.route, route))
+function scheduleMatches(price: ModelPrice, timestamp: number | undefined): boolean {
+  if (price.utcWindows === undefined || price.utcWindows.length === 0) return true
+  if (timestamp === undefined || !Number.isFinite(timestamp)) return false
+  const date = new Date(timestamp)
+  const day = date.getUTCDay()
+  const hour = date.getUTCHours()
+  const inside = price.utcWindows.some((window) =>
+    window.days.includes(day) && hour >= window.startHour && hour < window.endHour,
+  )
+  return price.outsideUtcWindows === true ? !inside : inside
+}
+
+export function priceFor(
+  route: string,
+  pricing: readonly ModelPrice[],
+  promptTokens = 0,
+  timestamp?: number,
+): ModelPrice | undefined {
+  return pricing.find((price) =>
+    wildcardMatches(price.route, route) &&
+    (price.minPromptTokens === undefined || promptTokens >= price.minPromptTokens) &&
+    (price.maxPromptTokens === undefined || promptTokens <= price.maxPromptTokens) &&
+    scheduleMatches(price, timestamp),
+  )
 }
 
 function tokensOf(value: UsageBuckets): number {
@@ -228,18 +247,14 @@ export function aggregateUsage(
   const dailySessions = new Map<string, Set<string>>()
   const rangeSessionIds = new Set<string>()
   const modelRows = new Map<string, UsageModel & { sessionIds: Set<string> }>()
-  const priceCache = new Map<string, ModelPrice | undefined>()
 
   for (const session of sessions) {
     for (const record of session.records) {
       const date = dateKey(record.timestamp, timeZone)
       if (date < allStart || date > endDate) continue
       const route = `${record.provider}/${record.model}`
-      let price = priceCache.get(route)
-      if (!priceCache.has(route)) {
-        price = priceFor(route, pricing)
-        priceCache.set(route, price)
-      }
+      const promptTokens = record.input + record.cacheRead + record.cacheWrite
+      const price = priceFor(route, pricing, promptTokens, record.timestamp)
       const totalTokens = tokensOf(record)
       const pricedTokens = price === undefined ? 0 : totalTokens
       const cost = costOf(record, price)

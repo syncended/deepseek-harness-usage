@@ -46,9 +46,11 @@ dsh plugin --profile web remove @syncended/dsh-usage
 
 ## Pricing
 
-Cost is an estimate derived from provider-reported token buckets and USD-per-million-token rules. The plugin ships starter public-list-price rules for common OpenAI GPT-5, Anthropic Claude 4, and DeepSeek routes. Pricing changes over time and negotiated or subscription plans may not map to token billing, so override the rules for your environment.
+Cost is an estimate derived from provider-reported token buckets and USD-per-million-token rules. The built-in catalog was verified on **2026-08-26 UTC** and contains 120 price/tier entries compiled into 259 exact provider-route rules for OpenAI GPT, Anthropic Claude, Google Gemini, DeepSeek, Z.AI GLM, Moonshot/Kimi, xAI Grok, Mistral, Cohere, Alibaba Qwen, and MiniMax.
 
-Rules are matched in order against `provider/model`. `*` is the only wildcard. A route without a matching rule remains visible as **UNPRICED** and is excluded from estimated spend; the dashboard reports pricing coverage.
+See the [complete generated catalog](docs/pricing-catalog.md) for every model, price, condition, caveat, and official source URL. The engine handles prompt-length tiers and DeepSeek's recurring UTC peak/off-peak windows. It deliberately does not guess broad future model families: a route without a matching rule remains visible as **UNPRICED** and is excluded from estimated spend, while the dashboard reports pricing coverage.
+
+Rules are matched in order against `provider/model`; `*` is the only route wildcard. Pricing changes over time, and batch/flex/priority service tiers, regional uplifts, negotiated rates, subscription plans, tool fees, and cache-storage duration may not map to token billing, so override the catalog for your environment when necessary.
 
 Override the bundle row in `$DSH_HOME/profiles/web/cordis.patch.yml`:
 
@@ -57,11 +59,18 @@ Override the bundle row in `$DSH_HOME/profiles/web/cordis.patch.yml`:
   config:
     scanConcurrency: 4
     pricing:
-      - route: openai-codex/gpt-5*
-        input: 1.25
-        output: 10
-        cacheRead: 0.125
-        cacheWrite: 1.25
+      - route: openai-codex/gpt-5.6-sol
+        minPromptTokens: 272000
+        input: 8
+        output: 30
+        cacheRead: 0.8
+        cacheWrite: 10
+      - route: openai-codex/gpt-5.6-sol
+        maxPromptTokens: 271999
+        input: 4
+        output: 20
+        cacheRead: 0.4
+        cacheWrite: 5
       - route: my-provider/private-model
         input: 0.8
         output: 3.2

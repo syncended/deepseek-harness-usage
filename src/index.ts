@@ -7,10 +7,17 @@ import { createUsageHttpHandler } from './http.js'
 import type { ModelPrice, SessionUsage, UsagePluginConfig, UsageRange, UsageSnapshot } from './types.js'
 
 export * from './aggregate.js'
+export * from './pricing-catalog.js'
 export * from './types.js'
 
 export const name = 'usage'
 const API_PREFIX = '/api/usage'
+
+const UtcWindowSchema = z.object({
+  days: z.array(z.number().min(0).max(6)).required(),
+  startHour: z.number().min(0).max(23).required(),
+  endHour: z.number().min(1).max(24).required(),
+})
 
 const PriceSchema = z.object({
   route: z.string().required(),
@@ -18,10 +25,23 @@ const PriceSchema = z.object({
   output: z.number().min(0).default(0),
   cacheRead: z.number().min(0).default(0),
   cacheWrite: z.number().min(0).default(0),
+  minPromptTokens: z.number().min(0),
+  maxPromptTokens: z.number().min(0),
+  utcWindows: z.array(UtcWindowSchema),
+  outsideUtcWindows: z.boolean(),
 })
 
+function clonePrice(price: ModelPrice): ModelPrice {
+  return {
+    ...price,
+    ...(price.utcWindows === undefined ? {} : {
+      utcWindows: price.utcWindows.map((window) => ({ ...window, days: [...window.days] })),
+    }),
+  }
+}
+
 export const Config: z<UsagePluginConfig> = z.object({
-  pricing: z.array(PriceSchema).default(DEFAULT_PRICING.map((price) => ({ ...price }))),
+  pricing: z.array(PriceSchema).default(DEFAULT_PRICING.map(clonePrice) as never),
   scanConcurrency: z.number().min(1).max(16).default(4),
 }) as z<UsagePluginConfig>
 
@@ -42,7 +62,7 @@ export class UsageService extends Service {
 
   constructor(ctx: Context, config: UsagePluginConfig) {
     super(ctx, 'usage')
-    this.pricing = (config.pricing ?? DEFAULT_PRICING).map((price) => ({ ...price }))
+    this.pricing = (config.pricing ?? DEFAULT_PRICING).map(clonePrice)
     this.scanConcurrency = config.scanConcurrency ?? 4
   }
 
