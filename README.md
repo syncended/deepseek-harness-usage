@@ -1,0 +1,103 @@
+# DeepSeek Harness Usage
+
+A local-first DeepSeek Harness plugin for token usage, estimated model cost, trends, and a GitHub-style activity heatmap.
+
+> **Status:** MVP for `@deepseek-ai/dsh` `0.1.1-rc.2`. The plugin is read-only: the durable Harness session log remains the single source of truth and no parallel telemetry database is created.
+
+## What works
+
+- Full **Usage** workspace opened from the main sidebar.
+- 30-day, 90-day, one-year, and all-time ranges.
+- Summary cards for estimated spend, total tokens, model calls, sessions, and active days.
+- Interactive trend chart for tokens, estimated cost, or calls.
+- Input/output/cache token mix.
+- GitHub-style 365-day activity heatmap.
+- Per-provider/model usage, session count, call count, token volume, and estimated cost.
+- Browser timezone-aware day grouping.
+- Revision-aware in-memory scan cache: unchanged durable sessions are not reparsed on every refresh.
+- Responsive light/dark UI built on the supported DSH sidebar and center-workspace slots.
+
+## Install
+
+Requirements: Node.js 22+ and a working `dsh web` profile.
+
+From npm:
+
+```bash
+dsh plugin --profile web add @syncended/dsh-usage
+```
+
+Or from this checkout:
+
+```bash
+pnpm install
+pnpm check
+
+dsh plugin --profile web add .
+```
+
+The package declares a DSH bundle, so `dsh plugin` appends it to the Web profile automatically. Restart the running Web Harness after the initial install, refresh the page, and open **Usage** from the sidebar.
+
+To remove it:
+
+```bash
+dsh plugin --profile web remove @syncended/dsh-usage
+```
+
+## Pricing
+
+Cost is an estimate derived from provider-reported token buckets and USD-per-million-token rules. The plugin ships starter public-list-price rules for common OpenAI GPT-5, Anthropic Claude 4, and DeepSeek routes. Pricing changes over time and negotiated or subscription plans may not map to token billing, so override the rules for your environment.
+
+Rules are matched in order against `provider/model`. `*` is the only wildcard. A route without a matching rule remains visible as **UNPRICED** and is excluded from estimated spend; the dashboard reports pricing coverage.
+
+Override the bundle row in `$DSH_HOME/profiles/web/cordis.patch.yml`:
+
+```yaml
+- id: usage
+  config:
+    scanConcurrency: 4
+    pricing:
+      - route: openai-codex/gpt-5*
+        input: 1.25
+        output: 10
+        cacheRead: 0.125
+        cacheWrite: 1.25
+      - route: my-provider/private-model
+        input: 0.8
+        output: 3.2
+        cacheRead: 0.08
+        cacheWrite: 0.8
+```
+
+All amounts are USD per one million tokens. Reasoning tokens are already included in the provider's output bucket and are not counted again.
+
+## Data semantics
+
+1. The host lists materialized sessions through `ctx.sessionPersistence.listSnapshots()`.
+2. Changed sessions are read from the durable persistence prefix and accepted only when a second revision snapshot still matches, which avoids caching buffered live events under a durable revision. The capability transparently handles JSONL, compressed JSONL, SQLite, or another backend.
+3. Usage chunks and final assistant-message usage are folded with one last-wins sample per `(turn, step)`, matching Harness token-meter semantics.
+4. The exact provider/model route comes from request headers, request context, or the final model message source.
+5. The browser requests an aggregate from the package-owned read-only `GET /api/usage` endpoint. Prompts, tool arguments, and message content are never returned.
+
+The first dashboard load may scan historical sessions. Subsequent loads reuse cached results while each persistence revision is unchanged.
+
+## Privacy and security
+
+- No analytics leave the Harness host.
+- No external telemetry or pricing requests are made.
+- The HTTP API is same-origin and read-only.
+- API output contains dates, route names, token counts, call/session counts, estimated costs, and aggregate read-error count. It does not include prompts, responses, paths, or session IDs.
+
+## Development
+
+```bash
+pnpm install
+pnpm check
+npm pack --dry-run
+```
+
+The host plugin is strict TypeScript compiled to `dist/`. The external Web Client Plugin is a ready lazy-CJS module in `lib/client.js`, so it does not depend on unpublished DSH monorepo frontend tooling.
+
+## License
+
+MIT

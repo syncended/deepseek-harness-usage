@@ -1,0 +1,5 @@
+# @syncended/dsh-usage bundle patch.
+# Reads the existing durable session log; no parallel telemetry store is created.
+- insert:
+    - id: usage
+      name: "@syncended/dsh-usage"
