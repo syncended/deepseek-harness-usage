@@ -9,9 +9,9 @@ A local-first DeepSeek Harness plugin for token usage, estimated model cost, tre
 - Full **Usage** workspace opened from the main sidebar.
 - 30-day, 90-day, one-year, and all-time ranges.
 - Summary cards for estimated spend, total tokens, model calls, sessions, and active days.
-- Interactive trend chart for tokens, estimated cost, or calls.
+- Interactive trend chart for tokens, estimated cost, or calls, with pointer and keyboard tooltips.
 - Input/output/cache token mix.
-- GitHub-style 365-day activity heatmap.
+- Interactive 365-day activity heatmap with token/cost/call color modes, quartile intensity levels, and per-day details.
 - Per-provider/model usage, session count, call count, token volume, and estimated cost.
 - Browser timezone-aware day grouping.
 - Revision-aware in-memory scan cache: unchanged durable sessions are not reparsed on every refresh.

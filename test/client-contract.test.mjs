@@ -23,3 +23,14 @@ test('client renders all primary analytics surfaces', () => {
     assert.ok(client.includes(label), `missing ${label}`)
   }
 })
+
+test('trend and activity views expose visible interactive details', () => {
+  assert.match(client, /dsh-usage-chart-tooltip/)
+  assert.match(client, /onPointerMove: selectAtPointer/)
+  assert.match(client, /Use left and right arrow keys to inspect days/)
+  assert.match(client, /dsh-usage-heat-tooltip/)
+  assert.match(client, /role: "grid"/)
+  assert.match(client, /Activity color metric/)
+  assert.match(client, /quartile color scale from less to more/)
+  assert.doesNotMatch(client, /h\("title", null, `\$\{day\.date\}/)
+})
