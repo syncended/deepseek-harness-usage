@@ -4,6 +4,12 @@ A local-first DeepSeek Harness plugin for token usage, estimated model cost, tre
 
 > **Status:** MVP for `@deepseek-ai/dsh` `0.1.1-rc.2`. The plugin is read-only: the durable Harness session log remains the single source of truth and no parallel telemetry database is created.
 
+<p align="center">
+  <img src="./docs/assets/usage-dashboard.png" width="920" alt="Dark-theme DeepSeek Harness Usage dashboard with sanitized demonstration data" />
+</p>
+
+<p align="center"><sub>Rendered by the real plugin UI with deterministic demonstration data; no personal usage is shown.</sub></p>
+
 ## What works
 
 - Full **Usage** workspace opened from the main sidebar.
@@ -36,7 +42,7 @@ pnpm check
 dsh plugin --profile web add .
 ```
 
-The package declares a DSH bundle, so `dsh plugin` appends it to the Web profile automatically. Restart the running Web Harness after the initial install, refresh the page, and open **Usage** from the sidebar.
+The package declares a DSH bundle, so `dsh plugin` appends it to the Web profile automatically. Restart the running `dsh web` process after installing or upgrading, refresh the existing page, and open **Usage** from the sidebar. The browser client reads the same Host through a package-owned same-origin endpoint; no separate URL, token, telemetry service, or plugin-specific environment variable is required.
 
 To remove it:
 
@@ -54,7 +60,7 @@ Rules are matched in order against `provider/model`; `*` is the only route wildc
 
 Pricing changes over time, and batch/flex/priority service tiers, regional uplifts, negotiated rates, subscription plans, tool fees, and cache-storage duration may not map to token billing, so override the catalog for your environment when necessary. Current rules without an explicit validity interval remain current-list-price estimates rather than a historical invoice reconstruction.
 
-Override the bundle row in `$DSH_HOME/profiles/web/cordis.patch.yml`:
+To override pricing or scan behavior, edit the existing `usage` row in `$DSH_HOME/profiles/web/cordis.patch.yml`; do not add a duplicate row with the same id. Restart the Host after changing it:
 
 ```yaml
 - id: usage
