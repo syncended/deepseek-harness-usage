@@ -39,6 +39,26 @@ test('catalog selects prompt-length pricing tiers', () => {
   assert.equal(priceFor('dashscope/qwen3-coder-plus-2025-09-23', DEFAULT_PRICING, 300_000)?.output, 60)
 })
 
+test('GPT-6 Astra prices every token bucket across the exact context boundary', () => {
+  for (const provider of ['openai', 'openai-codex']) {
+    const route = `${provider}/gpt-6-astra`
+    for (const [promptTokens, expected] of [
+      [0, [10, 1, 12.5, 50]],
+      [271_999, [10, 1, 12.5, 50]],
+      [272_000, [10, 1, 12.5, 50]],
+      [272_001, [20, 2, 25, 75]],
+      [922_000, [20, 2, 25, 75]],
+    ]) {
+      const price = priceFor(route, DEFAULT_PRICING, promptTokens)
+      assert.ok(price, `${route} at ${promptTokens}`)
+      assert.deepEqual([price.input, price.cacheRead, price.cacheWrite, price.output], expected)
+    }
+    assert.equal(priceFor(`${route}-unknown`, DEFAULT_PRICING, 100), undefined)
+  }
+  assert.equal(priceFor('other/gpt-6-astra', DEFAULT_PRICING, 100), undefined)
+  assert.equal(priceFor('OPENAI/GPT-6-ASTRA', DEFAULT_PRICING, 100)?.input, 10)
+})
+
 test('catalog selects DeepSeek peak and off-peak UTC rates', () => {
   const mondayPeak = Date.parse('2026-08-24T02:00:00Z')
   const mondayOffPeak = Date.parse('2026-08-24T05:00:00Z')

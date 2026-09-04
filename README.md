@@ -52,7 +52,7 @@ dsh plugin --profile web remove @syncended/dsh-usage
 
 ## Pricing
 
-Cost is an estimate derived from provider-reported token buckets and USD-per-million-token rules. The built-in catalog was verified on **2026-08-26 UTC** and contains 128 price/tier entries compiled into 289 provider-route rules for OpenAI GPT, Anthropic Claude, Google Gemini, DeepSeek, Z.AI GLM, Moonshot/Kimi, xAI Grok, Mistral, Cohere, Alibaba Qwen, and MiniMax.
+Cost is an estimate derived from provider-reported token buckets and USD-per-million-token rules. The built-in catalog was verified on **2026-08-26 UTC** and contains 130 price/tier entries compiled into 293 provider-route rules for OpenAI GPT, Anthropic Claude, Google Gemini, DeepSeek, Z.AI GLM, Moonshot/Kimi, xAI Grok, Mistral, Cohere, Alibaba Qwen, and MiniMax.
 
 See the [complete generated catalog](docs/pricing-catalog.md) for every model, price, condition, caveat, and official source URL. The engine handles prompt-length tiers and DeepSeek's recurring UTC peak/off-peak windows. It deliberately does not guess broad future model families: a route without a matching rule remains visible as **UNPRICED** and is excluded from estimated spend, while the dashboard reports pricing coverage.
 
