@@ -1,6 +1,6 @@
 {
   "name": "@syncended/dsh-usage",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Token usage, model cost analytics, trends, and activity heatmaps for DeepSeek Harness",
   "type": "module",
   "main": "dist/index.js",
