@@ -20,7 +20,9 @@ A local-first DeepSeek Harness plugin for token usage, estimated model cost, tre
 - Interactive 365-day activity heatmap with token/cost/call color modes, quartile intensity levels, and per-day details.
 - Per-provider/model usage, session count, call count, token volume, and estimated cost.
 - Browser timezone-aware day grouping.
-- Revision-aware in-memory scan cache: unchanged durable sessions are not reparsed on every refresh.
+- Background scanning at Host startup and periodically thereafter, without opening Usage.
+- Revision-aware disk checkpoints: unchanged durable sessions are not reparsed, including after a Host restart.
+- Nonblocking dashboard reads with progressive scan status, automatic polling, and bounded in-memory aggregate caching.
 - Responsive light/dark UI built on the supported DSH sidebar and center-workspace slots.
 
 ## Install
@@ -65,7 +67,12 @@ To override pricing or scan behavior, edit the existing `usage` row in `$DSH_HOM
 ```yaml
 - id: usage
   config:
-    scanConcurrency: 4
+    scanConcurrency: 2
+    scanBatchSize: 32
+    refreshIntervalSeconds: 60
+    # Optional; by default $DSH_HOME/cache/usage/checkpoint.json (~/.dsh fallback).
+    # Set to "" to disable disk caching, or use a distinct absolute path per store/profile.
+    # cachePath: /absolute/path/to/usage-checkpoint.json
     pricing:
       - route: openai-codex/gpt-5.6-sol
         minPromptTokens: 272000
@@ -90,20 +97,27 @@ All amounts are USD per one million tokens. Reasoning tokens are already include
 
 ## Data semantics
 
-1. The host lists materialized sessions through `ctx.sessionPersistence.listSnapshots()`.
-2. Changed sessions are read from the durable persistence prefix and accepted only when a second revision snapshot still matches, which avoids caching buffered live events under a durable revision. The capability transparently handles JSONL, compressed JSONL, SQLite, or another backend.
+1. At plugin startup the Host restores its checkpoint and lists materialized sessions through `ctx.sessionPersistence.listSnapshots()`. Restored entries are used only after their source-qualified revisions match the current store.
+2. New or changed sessions are processed in batches (32 sessions, at most 2 concurrent reads by default). Results are published only after a second revision listing confirms them. The first batch is confirmed promptly; subsequent fast batches share a confirmation roughly every 5 seconds and at pass completion, avoiding a full metadata listing for every small batch. Unchanged sessions are skipped entirely. Changed sessions are currently reread from sequence zero, rather than folding an event suffix; this remains safe across source changes and log repairs. The persistence capability handles JSONL, compressed JSONL, SQLite, or another backend.
 3. Usage chunks and final assistant-message usage are folded with one last-wins sample per `(turn, step)`, matching Harness token-meter semantics.
 4. The exact provider/model route comes from request headers, request context, or the final model message source.
-5. The browser requests an aggregate from the package-owned read-only `GET /api/usage` endpoint. Prompts, tool arguments, and message content are never returned.
+5. `GET /api/usage` returns the latest in-memory aggregate immediately, without waiting for persistence reads. Optional `scan` metadata reports initialization, background activity, pending/cached/total session counts, last completed scan time, and listing failure. Prompts, tool arguments, and message content are never returned.
 
-The first dashboard load may scan historical sessions. Subsequent loads reuse cached results while each persistence revision is unchanged.
+A new pass starts 60 seconds after the previous pass completes (`refreshIntervalSeconds`, 5–86400 seconds); scans never overlap. Work yields between reads/batches, and unloading the plugin cancels pending work and its timer. Completed batches become visible progressively. While the dashboard is visible it polls every 2 seconds during scanning/initialization and every 30 seconds otherwise; **Refresh** retrieves the latest cached result, not a forced full scan.
+
+On the first run without a valid checkpoint, totals are explicitly partial until indexing catches up. Active sessions whose revisions change during a read are retried on the next pass; read failures retain the last in-memory values when available. Deleted sessions are removed when the next listing observes them. A listing failure retains the previous projection and is reported in the UI.
+
+Checkpoints are a disposable, versioned JSON projection, atomically replaced after confirmed batches (at most once per 5 seconds during scanning), at pass completion, and on clean shutdown when dirty. They live at `$DSH_HOME/cache/usage/checkpoint.json` (default home: `~/.dsh`); `cachePath: ""` disables disk caching. Corrupt/incompatible checkpoints are ignored and rebuilt; write failures only disable persistence of the current update, not analytics. No checkpoint rewrite occurs for an unchanged scan. Use distinct `cachePath` values for multiple Hosts/profiles using different stores to avoid competing checkpoint writes. To reset the cache, stop the Host and delete that file.
+
+Only usage records and revisions are persisted, not pricing or timezone-specific aggregates. Pricing changes therefore take effect after restarting with the new configuration, without rescanning unchanged logs. A small in-memory aggregate cache is invalidated on projection changes and local-day rollover.
 
 ## Privacy and security
 
 - No analytics leave the Harness host.
 - No external telemetry or pricing requests are made.
 - The HTTP API is same-origin and read-only.
-- API output contains dates, route names, token counts, call/session counts, estimated costs, and aggregate read-error count. It does not include prompts, responses, paths, or session IDs.
+- API output contains dates, route names, token counts, call/session counts, estimated costs, aggregate read-error count, and background scan status. It does not include prompts, responses, paths, or session IDs.
+- The local checkpoint contains session IDs, source-qualified revisions, timestamps, model routes, and token buckets only. It excludes workspace paths and conversation content; backend-owned opaque revisions may themselves encode storage identity. New cache directories are private (`0700`) and checkpoint files use `0600` on POSIX.
 
 ## Development
 

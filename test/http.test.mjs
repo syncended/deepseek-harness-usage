@@ -23,6 +23,21 @@ test('usage API validates query and returns no-store JSON', async () => {
   assert.deepEqual(calls, [{ range: '90d', timeZone: 'Europe/Moscow' }])
 })
 
+test('usage API canonicalizes timezone variants and rejects invalid zones', async () => {
+  const zones = []
+  await withServer({ async snapshot(_range, timeZone) { zones.push(timeZone); return {} } }, async (origin) => {
+    for (const zone of ['America/New_York', 'america/new_york', 'AMERICA/NEW_YORK']) {
+      const response = await fetch(origin + '/api/usage?timeZone=' + encodeURIComponent(zone))
+      assert.equal(response.status, 200)
+      await response.json()
+    }
+    const invalid = await fetch(origin + '/api/usage?timeZone=Invalid%2FZone')
+    assert.equal(invalid.status, 400)
+    await invalid.json()
+  })
+  assert.deepEqual(zones, ['America/New_York', 'America/New_York', 'America/New_York'])
+})
+
 test('usage API rejects unsupported ranges and methods', async () => {
   await withServer({ async snapshot() { throw new Error('must not run') } }, async (origin) => {
     const invalid = await fetch(origin + '/api/usage?range=week')

@@ -136,6 +136,7 @@ export function dateKey(timestamp: number, timeZone: string): string {
       month: '2-digit',
       day: '2-digit',
     })
+    if (dateFormatterCache.size >= 32) dateFormatterCache.delete(dateFormatterCache.keys().next().value!)
     dateFormatterCache.set(timeZone, formatter)
   }
   const parts = formatter.formatToParts(new Date(timestamp))

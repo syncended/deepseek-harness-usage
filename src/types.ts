@@ -37,6 +37,12 @@ export interface ModelPrice {
 export interface UsagePluginConfig {
   pricing?: ModelPrice[]
   scanConcurrency?: number
+  /** Delay between completed background scans, in seconds. Default: 60. */
+  refreshIntervalSeconds?: number
+  /** Maximum changed sessions per read batch; confirmations may coalesce batches. Default: 32. */
+  scanBatchSize?: number
+  /** Checkpoint file; empty string disables disk caching. */
+  cachePath?: string
 }
 
 export interface UsageBuckets {
@@ -90,6 +96,16 @@ export interface UsageSummary extends UsageBuckets {
   pricingCoverage: number
 }
 
+export interface UsageScanStatus {
+  refreshing: boolean
+  initialized: boolean
+  lastUpdatedAt: string | null
+  totalSessions: number
+  cachedSessions: number
+  pendingSessions: number
+  failed: boolean
+}
+
 export interface UsageSnapshot {
   generatedAt: string
   range: UsageRange
@@ -101,4 +117,5 @@ export interface UsageSnapshot {
   heatmap: UsageDay[]
   models: UsageModel[]
   errors: number
+  scan?: UsageScanStatus
 }

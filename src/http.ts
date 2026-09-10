@@ -30,11 +30,10 @@ function validTimeZone(value: string | null): string {
   const timeZone = value?.trim() || 'UTC'
   if (timeZone.length > 100) throw Object.assign(new Error('timeZone is too long'), { status: 400 })
   try {
-    new Intl.DateTimeFormat('en-US', { timeZone }).format()
+    return new Intl.DateTimeFormat('en-US', { timeZone }).resolvedOptions().timeZone
   } catch {
     throw Object.assign(new Error('timeZone is not recognized'), { status: 400 })
   }
-  return timeZone
 }
 
 export function createUsageHttpHandler(
