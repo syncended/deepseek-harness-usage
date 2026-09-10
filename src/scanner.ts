@@ -1,11 +1,61 @@
 import { setImmediate as yieldToHost } from 'node:timers/promises'
-import type { SessionPersistence, SessionPersistenceSnapshot } from '@deepseek-ai/dsh-session-persistence'
+import type { SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
+import type { SessionPersistenceSnapshot } from '@deepseek-ai/dsh-session-persistence'
 import { extractSessionUsage } from './aggregate.js'
 import { loadCheckpoint, saveCheckpoint, type CachedSession } from './checkpoint.js'
 import type { SessionUsage, UsageScanStatus } from './types.js'
 
+interface StoredSession {
+  meta: SessionHeader
+  events: readonly SessionEvent[]
+}
+
+// Structural contracts keep builds against 0.1.1 compatible with the 0.1.5
+// handle-based runtime, without importing types absent from older Hosts.
+interface LegacyPersistence {
+  listSnapshots(signal?: AbortSignal): Promise<readonly SessionPersistenceSnapshot[]>
+  readFrom(id: SessionId, fromSeq: number, signal?: AbortSignal): Promise<StoredSession>
+}
+
+interface HandlePersistence {
+  list(options?: { signal?: AbortSignal }): Promise<readonly SessionPersistenceSnapshot[]>
+  open(id: SessionId, access: 'read', options?: { signal?: AbortSignal }): Promise<{
+    readonly header: SessionHeader
+    readonly inheritedEventCount: number
+    read(offset?: number, length?: number, options?: { signal?: AbortSignal }): Promise<{ events: readonly SessionEvent[] }>
+    close(): Promise<void>
+  }>
+}
+
+function adaptPersistence(persistence: LegacyPersistence | HandlePersistence) {
+  if ('listSnapshots' in persistence) {
+    return {
+      restoreCheckpoint: true,
+      listSnapshots: (signal: AbortSignal) => persistence.listSnapshots(signal),
+      readFrom: (id: SessionId, signal: AbortSignal) => persistence.readFrom(id, 0, signal),
+    }
+  }
+  return {
+    // Modern revisions are comparable only within one service instance. A disk
+    // checkpoint must not bypass reading a new instance's potentially different log.
+    restoreCheckpoint: false,
+    listSnapshots: (signal: AbortSignal) => persistence.list({ signal }),
+    readFrom: async (id: SessionId, signal: AbortSignal): Promise<StoredSession> => {
+      const handle = await persistence.open(id, 'read', { signal })
+      try {
+        const { events } = await handle.read(0, undefined, { signal })
+        // The fork cut moved out of the header; retain the aggregator's legacy
+        // input shape without mutating the immutable persistence-owned header.
+        return { meta: { ...handle.header, seedLength: handle.inheritedEventCount }, events }
+      } finally {
+        await handle.close()
+      }
+    },
+  }
+}
+
 interface ScannerOptions {
-  persistence: Pick<SessionPersistence, 'listSnapshots' | 'readFrom'>
+  persistence: LegacyPersistence | HandlePersistence
   logger: { warn(message: string, ...args: unknown[]): void }
   cachePath: string
   intervalMs: number
@@ -30,7 +80,11 @@ export class UsageScanner {
   errors = 0
   version = 0
 
-  constructor(private readonly options: ScannerOptions) {}
+  private readonly persistence: ReturnType<typeof adaptPersistence>
+
+  constructor(private readonly options: ScannerOptions) {
+    this.persistence = adaptPersistence(options.persistence)
+  }
 
   get sessions(): SessionUsage[] {
     return [...this.cache.values()].map((entry) => entry.usage)
@@ -122,11 +176,12 @@ export class UsageScanner {
   }
 
   private async scan(): Promise<void> {
-    const { persistence, cachePath, concurrency, batchSize, logger } = this.options
+    const { cachePath, concurrency, batchSize, logger } = this.options
+    const persistence = this.persistence
     const signal = this.controller.signal
     if (!this.initialized && this.restored === undefined) {
       try {
-        this.restored = cachePath ? await loadCheckpoint(cachePath) : new Map()
+        this.restored = cachePath && persistence.restoreCheckpoint ? await loadCheckpoint(cachePath) : new Map()
       } catch (error) {
         logger.warn('usage: ignoring unreadable checkpoint: %s', String(error))
         this.restored = new Map()
@@ -154,7 +209,7 @@ export class UsageScanner {
           if (snapshot === undefined) continue
           const id = String(snapshot.header.id)
           try {
-            const stored = await persistence.readFrom(snapshot.header.id, 0, signal)
+            const stored = await persistence.readFrom(snapshot.header.id, signal)
             if (signal.aborted) return
             const usage = extractSessionUsage(stored.meta, stored.events)
             // Do not retain workspace paths or raw log content in the projection.

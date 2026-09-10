@@ -2,7 +2,7 @@
 
 A local-first DeepSeek Harness plugin for token usage, estimated model cost, trends, and a GitHub-style activity heatmap.
 
-> **Status:** MVP for `@deepseek-ai/dsh` `0.1.1-rc.2`. The plugin is read-only: the durable Harness session log remains the single source of truth and no parallel telemetry database is created.
+> **Status:** MVP supporting the DSH `0.1.5-rc.2` main-panel API, with a legacy navigation fallback for `0.1.1-rc.2`. The plugin is read-only: the durable Harness session log remains the single source of truth and no parallel telemetry database is created.
 
 <p align="center">
   <img src="./docs/assets/usage-dashboard.png" width="920" alt="Dark-theme DeepSeek Harness Usage dashboard with sanitized demonstration data" />
@@ -21,9 +21,10 @@ A local-first DeepSeek Harness plugin for token usage, estimated model cost, tre
 - Per-provider/model usage, session count, call count, token volume, and estimated cost.
 - Browser timezone-aware day grouping.
 - Background scanning at Host startup and periodically thereafter, without opening Usage.
-- Revision-aware disk checkpoints: unchanged durable sessions are not reparsed, including after a Host restart.
+- Revision-aware caching skips unchanged sessions. Legacy persistence supports disk-checkpoint reuse after a Host restart; the current handle API is revalidated by reading sessions again because its revisions are only comparable within one service instance.
 - Nonblocking dashboard reads with progressive scan status, automatic polling, and bounded in-memory aggregate caching.
 - Responsive light/dark UI built on the supported DSH sidebar and center-workspace slots.
+- Native main-panel navigation on current DSH, with a legacy conversation-slot fallback for older versions.
 
 ## Install
 
@@ -97,19 +98,21 @@ All amounts are USD per one million tokens. Reasoning tokens are already include
 
 ## Data semantics
 
-1. At plugin startup the Host restores its checkpoint and lists materialized sessions through `ctx.sessionPersistence.listSnapshots()`. Restored entries are used only after their source-qualified revisions match the current store.
+1. At plugin startup the Host lists sessions through `ctx.sessionPersistence.list()` on current DSH, or `listSnapshots()` on legacy DSH. The legacy API can reuse a disk checkpoint after its source-qualified revisions match the current store. Current handle-API revisions are only comparable within one service instance, so sessions are read again after restart rather than trusting an old checkpoint.
 2. New or changed sessions are processed in batches (32 sessions, at most 2 concurrent reads by default). Results are published only after a second revision listing confirms them. The first batch is confirmed promptly; subsequent fast batches share a confirmation roughly every 5 seconds and at pass completion, avoiding a full metadata listing for every small batch. Unchanged sessions are skipped entirely. Changed sessions are currently reread from sequence zero, rather than folding an event suffix; this remains safe across source changes and log repairs. The persistence capability handles JSONL, compressed JSONL, SQLite, or another backend.
-3. Usage chunks and final assistant-message usage are folded with one last-wins sample per `(turn, step)`, matching Harness token-meter semantics.
+3. Current DSH reads use `open(id, 'read')`, `handle.read()`, and `handle.close()`; legacy DSH uses `readFrom()`. Read handles are always closed, including after errors or cancellation. Fork-inherited events are excluded using `handle.inheritedEventCount` on current DSH or the legacy header's `seedLength`. Usage chunks and final assistant-message usage are folded with one last-wins sample per `(turn, step)`, matching Harness token-meter semantics.
 4. The exact provider/model route comes from request headers, request context, or the final model message source.
 5. `GET /api/usage` returns the latest in-memory aggregate immediately, without waiting for persistence reads. Optional `scan` metadata reports initialization, background activity, pending/cached/total session counts, last completed scan time, and listing failure. Prompts, tool arguments, and message content are never returned.
 
 A new pass starts 60 seconds after the previous pass completes (`refreshIntervalSeconds`, 5–86400 seconds); scans never overlap. Work yields between reads/batches, and unloading the plugin cancels pending work and its timer. Completed batches become visible progressively. While the dashboard is visible it polls every 2 seconds during scanning/initialization and every 30 seconds otherwise; **Refresh** retrieves the latest cached result, not a forced full scan.
 
+Current DSH's finalized `assistant/message` usage is supported. Usage found only inside an `assistant/attempt` embedded stream is not yet included; totals are not an invoice reconstruction.
+
 On the first run without a valid checkpoint, totals are explicitly partial until indexing catches up. Active sessions whose revisions change during a read are retried on the next pass; read failures retain the last in-memory values when available. Deleted sessions are removed when the next listing observes them. A listing failure retains the previous projection and is reported in the UI.
 
 Checkpoints are a disposable, versioned JSON projection, atomically replaced after confirmed batches (at most once per 5 seconds during scanning), at pass completion, and on clean shutdown when dirty. They live at `$DSH_HOME/cache/usage/checkpoint.json` (default home: `~/.dsh`); `cachePath: ""` disables disk caching. Corrupt/incompatible checkpoints are ignored and rebuilt; write failures only disable persistence of the current update, not analytics. No checkpoint rewrite occurs for an unchanged scan. Use distinct `cachePath` values for multiple Hosts/profiles using different stores to avoid competing checkpoint writes. To reset the cache, stop the Host and delete that file.
 
-Only usage records and revisions are persisted, not pricing or timezone-specific aggregates. Pricing changes therefore take effect after restarting with the new configuration, without rescanning unchanged logs. A small in-memory aggregate cache is invalidated on projection changes and local-day rollover.
+Only usage records and revisions are persisted, not pricing or timezone-specific aggregates. Pricing changes therefore take effect after restarting with the new configuration; legacy checkpoint reuse avoids rescanning unchanged logs, while current DSH revalidates them as described above. A small in-memory aggregate cache is invalidated on projection changes and local-day rollover.
 
 ## Privacy and security
 
