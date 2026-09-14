@@ -14,7 +14,7 @@ A local-first DeepSeek Harness plugin for token usage, estimated model cost, tre
 
 - Full **Usage** workspace opened from the main sidebar.
 - 30-day, 90-day, one-year, and all-time ranges.
-- Summary cards for estimated spend, total tokens, model calls, sessions, and active days.
+- Clearly separated API estimates, Codex API equivalents, and unavailable actual charges, alongside tokens, calls, sessions, and active days.
 - Interactive trend chart for tokens, estimated cost, or calls, with pointer and keyboard tooltips.
 - Input/output/cache token mix.
 - Interactive 365-day activity heatmap with token/cost/call color modes, quartile intensity levels, and per-day details.
@@ -55,9 +55,19 @@ dsh plugin --profile web remove @syncended/dsh-usage
 
 ## Pricing
 
+**Token-rate estimates are not payment records.** The dashboard distinguishes:
+
+- **API estimate**: token-rate estimates for non-Codex providers, including DeepSeek and custom gateways. These are still estimates, not confirmed charges.
+- **Codex API equivalent**: the hypothetical token-rate cost for the `openai-codex` provider. It is not an additional subscription charge; subscription fees and quotas cannot be reconstructed from these logs.
+- **Actual charges**: unavailable. The plugin does not import invoices or payment records; unknown charges must never be displayed as `$0`.
+
+Classification uses the provider route (case-insensitive `openai-codex`), not the model name. A corporate gateway serving a GPT model is not automatically classified as subscription usage. This is a display convention, not a claim about the account's billing arrangement. Configured rates remain estimates too.
+
+For compatibility, API `cost` fields retain the combined token-rate estimate. Summary/session rows additionally expose `apiEstimateCost`, `subscriptionEquivalentCost`, and `actualCost: null`; model rows expose `costKind`. The two estimate components sum to `cost`. Charts and sorting by API equivalent use the combined estimate, never actual spending.
+
 Cost is an estimate derived from provider-reported token buckets and USD-per-million-token rules. The built-in catalog has a **2026-08-26 UTC** baseline, with DeepSeek V4.1 Flash rates updated for the **2026-09-10 04:00 UTC** transition, and contains 132 price/tier entries compiled into provider-route rules and model-name fallback rules for OpenAI GPT, Anthropic Claude, Google Gemini, DeepSeek, Z.AI GLM, Moonshot/Kimi, xAI Grok, Mistral, Cohere, Alibaba Qwen, and MiniMax.
 
-See the [complete generated catalog](docs/pricing-catalog.md) for every model, price, condition, caveat, and official source URL. The engine handles prompt-length tiers and DeepSeek's recurring UTC peak/off-peak windows. It deliberately does not guess broad future model families: a route without a matching rule remains visible as **UNPRICED** and is excluded from estimated spend, while the dashboard reports pricing coverage.
+See the [complete generated catalog](docs/pricing-catalog.md) for every model, price, condition, caveat, and official source URL. The engine handles prompt-length tiers and DeepSeek's recurring UTC peak/off-peak windows. It deliberately does not guess broad future model families: a route without a matching rule remains visible as **UNPRICED** and is excluded from the API-equivalent estimate, while the dashboard reports pricing coverage.
 
 Built-in rules try known provider/model routes first, then model-name fallbacks such as `*/glm-5.3`. A corporate or custom provider with a recognized model ID therefore gets a **public first-party list-price estimate**, not its actual negotiated bill. Provider names and model names in the statistics are preserved. Matching is case-insensitive; unknown model IDs are not guessed or renamed. All context tiers, validity dates, and UTC schedules also apply to fallbacks. A custom `pricing` array replaces the entire catalog (including fallbacks), so explicit corporate rates or an empty array remain authoritative.
 
@@ -100,7 +110,9 @@ All amounts are USD per one million tokens. Reasoning tokens are already include
 
 ## Session analytics
 
-The **Sessions** table shows token buckets, estimated cost, pricing coverage, model count, and calls for each session in the selected date range. Search by title, session ID, or provider/model route; sort by spend, tokens, calls, or title. Group sessions by their exact title to compare repeated tasks, or by creation day. Groups can be expanded to inspect their individual sessions. Search filters sessions before grouping, so group totals reflect only matching sessions.
+The **Sessions** table shows token buckets, separate API estimates and Codex API equivalents, pricing coverage, model count, and calls for each session in the selected date range. Expand a session to see each provider/model's own tokens, calls, and estimate: a mixed session's total is not attributed to its first listed model. API session rows include a `models` breakdown that reconciles with the session total.
+
+Search by title, session ID, or provider/model route; sort by API equivalent, tokens, calls, or title. Group sessions by their exact title to compare repeated tasks, or by creation day. Groups can be expanded to inspect their individual sessions and model breakdowns. Search filters sessions before grouping, so group totals reflect only matching sessions. Token totals include repeated reads of cached context across calls, not just unique text.
 
 Titles come from saved session metadata, never reconstructed from prompts. Upgrading to session analytics invalidates the older title-less checkpoint (schema v1); the first scan rebuilds it as v2, so totals may initially be partial. Untitled sessions use `Session <id>`. Renames appear after the next confirmed scan. Costs and tokens include only calls inside the selected range, even when the session was created earlier; grouping by creation day does not change that usage window. Unknown prices remain **UNPRICED** or partially priced, including inside groups.
 

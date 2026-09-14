@@ -10,6 +10,7 @@ import type {
   UsageRecord,
   UsageSnapshot,
   UsageSession,
+  UsageSessionModel,
 } from './types.js'
 import { DEFAULT_PRICING } from './pricing-catalog.js'
 
@@ -295,7 +296,9 @@ export function aggregateUsage(
   const dailySessions = new Map<string, Set<string>>()
   const rangeSessionIds = new Set<string>()
   const modelRows = new Map<string, UsageModel & { sessionIds: Set<string> }>()
-  const sessionRows = new Map<string, UsageSession & { routeSet: Set<string> }>()
+  const sessionRows = new Map<string, UsageSession & { modelRows: Map<string, UsageSessionModel> }>()
+  let apiEstimateCost = 0
+  let subscriptionEquivalentCost = 0
 
   for (const session of sessions) {
     for (const record of session.records) {
@@ -322,6 +325,9 @@ export function aggregateUsage(
         dailySessions.set(date, sessionIds)
       }
       if (date < startDate) continue
+      const costKind = record.provider.toLowerCase() === 'openai-codex' ? 'subscription-equivalent' : 'api-estimate'
+      if (costKind === 'subscription-equivalent') subscriptionEquivalentCost += cost
+      else apiEstimateCost += cost
       rangeSessionIds.add(record.sessionId)
       let sessionRow = sessionRows.get(record.sessionId)
       if (sessionRow === undefined) {
@@ -331,7 +337,8 @@ export function aggregateUsage(
           createdAt: session.createdAt,
           input: 0, output: 0, cacheRead: 0, cacheWrite: 0,
           totalTokens: 0, pricedTokens: 0, cost: 0, calls: 0,
-          modelCount: 0, routes: [], routeSet: new Set<string>(),
+          modelCount: 0, routes: [], models: [], modelRows: new Map(),
+          apiEstimateCost: 0, subscriptionEquivalentCost: 0, actualCost: null,
         }
         sessionRows.set(record.sessionId, sessionRow)
       }
@@ -343,13 +350,32 @@ export function aggregateUsage(
       sessionRow.pricedTokens += pricedTokens
       sessionRow.cost += cost
       sessionRow.calls += 1
-      sessionRow.routeSet.add(route)
+      if (costKind === 'subscription-equivalent') sessionRow.subscriptionEquivalentCost += cost
+      else sessionRow.apiEstimateCost += cost
+      let sessionModel = sessionRow.modelRows.get(route)
+      if (sessionModel === undefined) {
+        sessionModel = {
+          route, provider: record.provider, model: record.model, costKind,
+          input: 0, output: 0, cacheRead: 0, cacheWrite: 0,
+          calls: 0, cost: 0, pricedTokens: 0, totalTokens: 0,
+        }
+        sessionRow.modelRows.set(route, sessionModel)
+      }
+      sessionModel.input += record.input
+      sessionModel.output += record.output
+      sessionModel.cacheRead += record.cacheRead
+      sessionModel.cacheWrite += record.cacheWrite
+      sessionModel.calls += 1
+      sessionModel.cost += cost
+      sessionModel.pricedTokens += pricedTokens
+      sessionModel.totalTokens += totalTokens
       let model = modelRows.get(route)
       if (model === undefined) {
         model = {
           route,
           provider: record.provider,
           model: record.model,
+          costKind,
           input: 0,
           output: 0,
           cacheRead: 0,
@@ -408,6 +434,9 @@ export function aggregateUsage(
     endDate,
     summary: {
       ...summary,
+      apiEstimateCost,
+      subscriptionEquivalentCost,
+      actualCost: null,
       sessions: rangeSessionIds.size,
       pricingCoverage: summary.totalTokens === 0 ? 1 : summary.pricedTokens / summary.totalTokens,
     },
@@ -415,7 +444,12 @@ export function aggregateUsage(
     heatmap,
     models,
     sessions: [...sessionRows.values()]
-      .map(({ routeSet, ...session }) => ({ ...session, routes: [...routeSet].sort(), modelCount: routeSet.size }))
+      .map(({ modelRows, ...session }) => ({
+        ...session,
+        routes: [...modelRows.keys()].sort(),
+        modelCount: modelRows.size,
+        models: [...modelRows.values()].sort((left, right) => right.cost - left.cost || right.totalTokens - left.totalTokens || left.route.localeCompare(right.route)),
+      }))
       .sort((left, right) => right.cost - left.cost || right.totalTokens - left.totalTokens || left.sessionId.localeCompare(right.sessionId)),
     errors,
   }

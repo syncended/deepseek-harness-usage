@@ -8,12 +8,12 @@ import { renderToStaticMarkup } from 'react-dom/server'
 const client = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
 function loadClient(react = React) {
   let exports
-  vm.runInNewContext(client.replace('    exports.inject = inject;', '    exports.__test = { SessionTable, sessionRows, sessionDay, Dashboard };\n    exports.inject = inject;'), {
+  vm.runInNewContext(client.replace('    exports.inject = inject;', '    exports.__test = { SessionTable, sessionRows, sessionDay, Dashboard, estimateParts };\n    exports.inject = inject;'), {
     window: { __ModuleLoader__: { load: ({ factory }) => { exports = factory(() => react) } } }, Intl,
   })
   return exports.__test
 }
-const { SessionTable, sessionRows, sessionDay, Dashboard } = loadClient()
+const { SessionTable, sessionRows, sessionDay, Dashboard, estimateParts } = loadClient()
 const session = (sessionId, title, extra = {}) => ({
   sessionId, title, createdAt: Date.parse('2026-01-02T01:00:00Z'),
   input: 60, output: 20, cacheRead: 15, cacheWrite: 5, totalTokens: 100,
@@ -134,10 +134,53 @@ test('table renders monetary coverage, all buckets, model count, and escapes tit
   ] }))
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/)
   assert.doesNotMatch(html, /<img/)
-  for (const text of ['Input 60', 'Output 20', 'Cache read 15', 'Cache write 5', '2 models', '50 tokens unpriced', 'UNPRICED', '$0.00', '$2.00', 'Cost (USD)']) assert.ok(html.includes(text), text)
+  for (const text of ['Input 60', 'Output 20', 'Cache read 15', 'Cache write 5', '2 models', '50 tokens unpriced', 'UNPRICED', '$0.00', '$2.00', 'API equivalent (USD)']) assert.ok(html.includes(text), text)
   assert.match(html, /<table/)
   assert.match(html, /scope="row"/)
   assert.match(html, /Session usage table/)
+})
+
+test('mixed-session model breakdowns preserve estimates through grouping and filtering', () => {
+  const model = (provider, cost, extra = {}) => ({ route: `${provider}/gpt-model`, provider, model: 'gpt-model', input: 60, output: 20, cacheRead: 15, cacheWrite: 5, totalTokens: 100, pricedTokens: 100, calls: 1, cost, ...extra })
+  const mixed = [
+    session('one', 'Same', { cost: 102, totalTokens: 200, pricedTokens: 200, calls: 2, models: [model('deepseek-official', 2), model('openai-codex', 100)] }),
+    session('two', 'Same', { cost: 5, totalTokens: 200, pricedTokens: 100, calls: 2, models: [model('deepseek-official', 5), model('company', 0, { pricedTokens: 0 })] }),
+  ]
+  const original = JSON.stringify(mixed)
+  const groups = sessionRows(mixed, '', 'title', 'cost', 'desc', 'UTC')
+  assert.equal(groups[0].models.length, 3)
+  assert.equal(groups[0].models.find(m => m.provider === 'deepseek-official').cost, 7)
+  assert.equal(groups[0].models.find(m => m.provider === 'deepseek-official').calls, 2)
+  assert.deepEqual(JSON.parse(JSON.stringify(estimateParts(groups[0]))), { api: 7, codex: 100 })
+  assert.equal(JSON.stringify(mixed), original)
+  const ui = mountTable({ sessions: mixed })
+  ui.change('select', 0, 'title')
+  assert.match(ui.html(), /Model breakdown/)
+  assert.match(ui.html(), /API estimate \$7\.00/)
+  assert.match(ui.html(), /Codex equivalent \$100/)
+  assert.match(ui.html(), /100 tokens unpriced/)
+  const toggle = ui.all(n => n.type === 'button' && n.props['aria-expanded'] === false)[0]
+  toggle.props.onClick(); ui.render()
+  assert.equal((ui.html().match(/<details/g) || []).length, 3)
+  assert.match(ui.html(), /deepseek-official\/gpt-model/)
+  assert.match(ui.html(), /not a subscription charge/)
+  assert.match(ui.html(), /UNPRICED/)
+  ui.change('input', 0, 'two')
+  assert.match(ui.html(), /API estimate \$5\.00/)
+  assert.doesNotMatch(ui.html(), /\$100/)
+  assert.equal(estimateParts(session('old', 'Old')), null)
+  assert.match(renderToStaticMarkup(React.createElement(SessionTable, { sessions: [session('old', 'Old')] })), /Breakdown unavailable/)
+})
+
+test('overview distinguishes API estimates, Codex equivalent and unknown actual charges', () => {
+  const snapshot = { summary: { totalTokens: 200, cost: 102, apiEstimateCost: 2, subscriptionEquivalentCost: 100, actualCost: null, pricingCoverage: 1 }, trend: [], heatmap: [], models: [], sessions: [], startDate: '2026-01-01', endDate: '2026-01-02', timeZone: 'UTC' }
+  const html = renderToStaticMarkup(React.createElement(Dashboard, { snapshot, range: '30d', metric: 'cost' }))
+  assert.match(html, /API estimate/)
+  assert.match(html, /Codex API equivalent/)
+  assert.match(html, /Actual charges<\/div><div[^>]*>Unavailable<\/div>/)
+  assert.match(html, /Not a subscription charge/)
+  assert.doesNotMatch(html, /Estimated spend/)
+  assert.deepEqual(JSON.parse(JSON.stringify(estimateParts({ models: [{ provider: 'OPENAI-CODEX', cost: 10 }, { provider: 'company', model: 'gpt-6-astra', cost: 4 }] }))), { api: 4, codex: 10 })
 })
 
 test('absent sessions and empty snapshots remain renderable', () => {

@@ -77,7 +77,20 @@ export interface UsageDay extends UsageBuckets {
   totalTokens: number
 }
 
+/** Display classification only, not proof of an account's billing arrangement. */
+export type CostKind = 'api-estimate' | 'subscription-equivalent'
+
+export interface CostEstimates {
+  /** Token-rate estimate excluding the openai-codex provider. */
+  apiEstimateCost: number
+  /** Hypothetical token-rate equivalent, not a Codex subscription charge. */
+  subscriptionEquivalentCost: number
+  /** Invoices are not imported; unknown is deliberately not zero. */
+  actualCost: null
+}
+
 export interface UsageModel extends UsageBuckets {
+  costKind: CostKind
   route: string
   provider: string
   model: string
@@ -88,8 +101,11 @@ export interface UsageModel extends UsageBuckets {
   totalTokens: number
 }
 
+export type UsageSessionModel = Omit<UsageModel, 'sessions'>
+
 /** Per-session totals restricted to the snapshot's selected range. */
-export interface UsageSession extends UsageBuckets {
+export interface UsageSession extends UsageBuckets, CostEstimates {
+  models: UsageSessionModel[]
   sessionId: string
   title: string
   createdAt: number
@@ -101,7 +117,7 @@ export interface UsageSession extends UsageBuckets {
   routes: string[]
 }
 
-export interface UsageSummary extends UsageBuckets {
+export interface UsageSummary extends UsageBuckets, CostEstimates {
   totalTokens: number
   calls: number
   sessions: number

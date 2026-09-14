@@ -22,7 +22,7 @@ test('client dismisses Usage before external navigation clicks proceed', () => {
 })
 
 test('client renders all primary analytics surfaces', () => {
-  for (const label of ['Usage trend', 'Token mix', 'Activity', 'Models', 'Estimated spend']) {
+  for (const label of ['Usage trend', 'Token mix', 'Activity', 'Models', 'API estimate']) {
     assert.ok(client.includes(label), `missing ${label}`)
   }
 })
@@ -385,14 +385,14 @@ test('scan status marks partial totals, background updates, and generic failures
   assert.match(markup, /Indexing usage in the background/)
   assert.match(markup, /Partial totals · 2 of 10 sessions cached · 8 pending/)
   assert.match(markup, /aria-label="Partial usage summary"/)
-  assert.match(markup, /Estimated spend/)
+  assert.match(markup, /API estimate/)
   assert.match(renderStatus(cachedSnapshot({ refreshing: true }).scan), /Updating usage in the background/)
   assert.match(renderStatus(cachedSnapshot({ pendingSessions: 1 }).scan), /Partial totals/)
   const failed = cachedSnapshot({ failed: true })
   const failedMarkup = renderToStaticMarkup(React.createElement(Dashboard, { snapshot: failed, range: '30d', metric: 'totalTokens', refreshError: 'Network unavailable' }))
   assert.match(failedMarkup, /Background usage update failed\. Previously cached data is still shown/)
   assert.match(failedMarkup, /Could not refresh usage\. Showing the previous snapshot\. Network unavailable/)
-  assert.match(failedMarkup, /Estimated spend/)
+  assert.match(failedMarkup, /API estimate/)
   assert.doesNotMatch(failedMarkup, /Usage unavailable/)
   assert.doesNotMatch(client, /snapshot\.generatedAt/)
 })

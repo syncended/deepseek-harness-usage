@@ -102,7 +102,9 @@ test('session rows preserve per-call prices, selected range, identity and privac
   const snapshot = aggregateUsage(sessions, prices, '30d', 'UTC', day('2026-08-03'))
   assert.equal(snapshot.sessions.length, snapshot.summary.sessions)
   assert.deepEqual(snapshot.sessions.map((row) => row.sessionId), ['a', 'b', 'c'])
-  assert.deepEqual(snapshot.sessions[0], { sessionId: 'a', title: 'Same name', createdAt: day('2025-01-01'), input: 2_000_000, output: 200_000, cacheRead: 400_000, cacheWrite: 100_000, totalTokens: 2_700_000, pricedTokens: 1_350_000, cost: 2.2, calls: 2, modelCount: 2, routes: ['custom/priced', 'custom/unknown'] })
+  const { models: sessionModels, ...sessionTotals } = snapshot.sessions[0]
+  assert.equal(sessionModels.length, 2)
+  assert.deepEqual(sessionTotals, { apiEstimateCost: 2.2, subscriptionEquivalentCost: 0, actualCost: null, sessionId: 'a', title: 'Same name', createdAt: day('2025-01-01'), input: 2_000_000, output: 200_000, cacheRead: 400_000, cacheWrite: 100_000, totalTokens: 2_700_000, pricedTokens: 1_350_000, cost: 2.2, calls: 2, modelCount: 2, routes: ['custom/priced', 'custom/unknown'] })
   assert.equal(snapshot.sessions[2].title, 'Session c')
   for (const field of ['input', 'output', 'cacheRead', 'cacheWrite', 'totalTokens', 'pricedTokens', 'calls', 'cost']) {
     assert.equal(snapshot.sessions.reduce((sum, row) => sum + row[field], 0), snapshot.summary[field], field)
@@ -136,6 +138,38 @@ test('custom provider catalog pricing reaches model and session rows without rew
   assert.deepEqual(snapshot.sessions[0].routes, ['private-gateway/glm-5.3'])
   assert.equal(snapshot.models[0].provider, 'private-gateway')
   assert.equal(snapshot.models[0].model, 'glm-5.3')
+})
+
+test('API estimates and Codex equivalents reconcile per session without inventing charges', () => {
+  const r = (id, provider, model, input = 1_000_000, date = '2026-08-15') => ({ sessionId: id, provider, model, input, output: 0, cacheRead: 0, cacheWrite: 0, timestamp: day(date) })
+  const sessions = [
+    { sessionId: 'a', title: 'Mixed', createdAt: day('2026-08-01'), records: [r('a', 'openai-codex', 'gpt-5.6-sol', 100_000), r('a', 'deepseek-official', 'deepseek-v4-pro'), r('a', 'custom', 'unknown'), r('a', 'zai', 'glm-4.7-flash'), r('a', 'openai-codex', 'gpt-5.6-sol', 1_000_000, '2026-01-01')] },
+    { sessionId: 'b', title: 'Mixed', createdAt: day('2026-08-01'), records: [r('b', 'OPENAI-CODEX', 'gpt-5.6-sol'), r('b', 'company', 'gpt-5.6-sol')] },
+  ]
+  const snapshot = aggregateUsage(sessions, DEFAULT_PRICING, '30d', 'UTC', day('2026-08-16'))
+  const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b}`)
+  assert.equal(snapshot.summary.actualCost, null)
+  close(snapshot.summary.subscriptionEquivalentCost, 8.4)
+  close(snapshot.summary.apiEstimateCost, 8.66)
+  for (const row of snapshot.sessions) {
+    assert.equal(row.actualCost, null)
+    close(row.apiEstimateCost + row.subscriptionEquivalentCost, row.cost)
+    for (const key of ['input', 'output', 'cacheRead', 'cacheWrite', 'cost', 'calls', 'totalTokens', 'pricedTokens']) close(row.models.reduce((sum, m) => sum + m[key], 0), row[key])
+    assert.equal(row.modelCount, row.models.length)
+    assert.deepEqual(row.models.map(m => m.route).sort(), row.routes)
+  }
+  const mixed = snapshot.sessions.find(s => s.sessionId === 'a')
+  assert.equal(mixed.calls, 4)
+  assert.equal(mixed.models.find(m => m.model === 'unknown').pricedTokens, 0)
+  assert.equal(mixed.models.find(m => m.model === 'glm-4.7-flash').cost, 0)
+  assert.equal(mixed.models.find(m => m.model === 'glm-4.7-flash').pricedTokens, 1_000_000)
+  assert.equal(snapshot.models.find(m => m.provider === 'company').costKind, 'api-estimate')
+  assert.equal(snapshot.models.find(m => m.provider === 'OPENAI-CODEX').costKind, 'subscription-equivalent')
+  for (const key of ['cost', 'apiEstimateCost', 'subscriptionEquivalentCost']) close(snapshot.sessions.reduce((sum, row) => sum + row[key], 0), snapshot.summary[key])
+  const empty = aggregateUsage([], DEFAULT_PRICING, 'all', 'UTC', day('2026-08-16'))
+  assert.equal(empty.summary.actualCost, null)
+  assert.equal(empty.summary.apiEstimateCost, 0)
+  assert.equal(empty.summary.subscriptionEquivalentCost, 0)
 })
 
 test('priceFor supports case-insensitive star globs', () => {
