@@ -188,12 +188,23 @@ addFlat('gemini', 'Gemini 2.5 Flash', GEMINI, ['gemini-2.5-flash'], 0.3, 0.03, 2
 addFlat('gemini', 'Gemini 2.5 Flash-Lite', GEMINI, ['gemini-2.5-flash-lite'], 0.1, 0.01, 0.4, { note: 'Text/image/video rate; audio and cache storage are excluded.' })
 
 const DEEPSEEK = ['deepseek', 'deepseek-api', 'deepseek-official', 'eliza/deepseek']
-function addDeepSeek(family: string, model: string, offPeak: [number, number, number], peak: [number, number, number]): void {
-  add({ source: 'deepseek', family: `${family} · peak`, providers: DEEPSEEK, models: [model], input: peak[0], cacheRead: peak[1], cacheWrite: peak[0], output: peak[2], utcWindows: WEEKDAY_DEEPSEEK_PEAK })
-  add({ source: 'deepseek', family: `${family} · off-peak`, providers: DEEPSEEK, models: [model], input: offPeak[0], cacheRead: offPeak[1], cacheWrite: offPeak[0], output: offPeak[2], utcWindows: WEEKDAY_DEEPSEEK_PEAK, outsideUtcWindows: true })
+function addDeepSeek(
+  family: string,
+  models: string[],
+  offPeak: [number, number, number],
+  peak: [number, number, number],
+  options: Partial<Pick<PricingCatalogEntry, 'validFrom' | 'validTo' | 'note'>> = {},
+): void {
+  add({ source: 'deepseek', family: `${family} · peak`, providers: DEEPSEEK, models, input: peak[0], cacheRead: peak[1], cacheWrite: peak[0], output: peak[2], utcWindows: WEEKDAY_DEEPSEEK_PEAK, ...options })
+  add({ source: 'deepseek', family: `${family} · off-peak`, providers: DEEPSEEK, models, input: offPeak[0], cacheRead: offPeak[1], cacheWrite: offPeak[0], output: offPeak[2], utcWindows: WEEKDAY_DEEPSEEK_PEAK, outsideUtcWindows: true, ...options })
 }
-addDeepSeek('DeepSeek V4 Flash', 'deepseek-v4-flash', [0.22, 0.007, 0.66], [0.44, 0.014, 1.32])
-addDeepSeek('DeepSeek V4 Pro', 'deepseek-v4-pro', [0.66, 0.022, 1.98], [1.32, 0.044, 3.96])
+const DEEPSEEK_V41_FLASH_FROM = '2026-09-10T04:00:00.000Z'
+addDeepSeek('DeepSeek V4 Flash', ['deepseek-v4-flash'], [0.22, 0.007, 0.66], [0.44, 0.014, 1.32], { validTo: DEEPSEEK_V41_FLASH_FROM })
+addDeepSeek('DeepSeek V4.1 Flash', ['deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'], [0.15, 0.003, 0.6], [0.3, 0.006, 1.2], {
+  validFrom: DEEPSEEK_V41_FLASH_FROM,
+  note: 'New Flash rates and legacy Flash aliases from 2026-09-10 04:00 UTC: https://api-docs.deepseek.com/news/news260910/. Current pricing page retains V4 Pro at its own unchanged rates.',
+})
+addDeepSeek('DeepSeek V4 Pro', ['deepseek-v4-pro'], [0.66, 0.022, 1.98], [1.32, 0.044, 3.96])
 addFlat('deepseek', 'DeepSeek Chat legacy', ['deepseek'], ['deepseek-chat'], 0.28, 0.028, 0.42, { note: 'Retired after 2026-07-24 15:59 UTC; retained for historical logs.', validTo: '2026-07-24T16:00:00.000Z' })
 addFlat('deepseek', 'DeepSeek Reasoner legacy', ['deepseek'], ['deepseek-reasoner'], 0.55, 0.14, 2.19, { note: 'Retired after 2026-07-24 15:59 UTC; retained for historical logs.', validTo: '2026-07-24T16:00:00.000Z' })
 
@@ -333,8 +344,8 @@ export function validatePricing(pricing: readonly ModelPrice[]): void {
   }
 }
 
-export const DEFAULT_PRICING: ModelPrice[] = PRICING_CATALOG.flatMap((entry) =>
-  entry.providers.flatMap((provider) => entry.models.map((model) => ({
+function routePrices(entry: PricingCatalogEntry, providers: readonly string[]): ModelPrice[] {
+  return providers.flatMap((provider) => entry.models.map((model) => ({
     route: `${provider}/${model}`,
     input: entry.input,
     output: entry.output,
@@ -346,7 +357,15 @@ export const DEFAULT_PRICING: ModelPrice[] = PRICING_CATALOG.flatMap((entry) =>
     ...(entry.outsideUtcWindows === undefined ? {} : { outsideUtcWindows: entry.outsideUtcWindows }),
     ...(entry.validFrom === undefined ? {} : { validFrom: entry.validFrom }),
     ...(entry.validTo === undefined ? {} : { validTo: entry.validTo }),
-  }))),
-)
+  })))
+}
+
+// Keep every provider-specific rule ahead of model-only list-price estimates.
+// Generate fallbacks from the same entries so context tiers, validity, and UTC
+// schedules cannot drift. Custom pricing arrays remain entirely caller-owned.
+export const DEFAULT_PRICING: ModelPrice[] = [
+  ...PRICING_CATALOG.flatMap((entry) => routePrices(entry, entry.providers)),
+  ...PRICING_CATALOG.flatMap((entry) => routePrices(entry, ['*'])),
+]
 
 validatePricing(DEFAULT_PRICING)

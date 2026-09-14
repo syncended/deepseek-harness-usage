@@ -55,9 +55,11 @@ dsh plugin --profile web remove @syncended/dsh-usage
 
 ## Pricing
 
-Cost is an estimate derived from provider-reported token buckets and USD-per-million-token rules. The built-in catalog was verified on **2026-08-26 UTC** and contains 130 price/tier entries compiled into 293 provider-route rules for OpenAI GPT, Anthropic Claude, Google Gemini, DeepSeek, Z.AI GLM, Moonshot/Kimi, xAI Grok, Mistral, Cohere, Alibaba Qwen, and MiniMax.
+Cost is an estimate derived from provider-reported token buckets and USD-per-million-token rules. The built-in catalog has a **2026-08-26 UTC** baseline, with DeepSeek V4.1 Flash rates updated for the **2026-09-10 04:00 UTC** transition, and contains 132 price/tier entries compiled into provider-route rules and model-name fallback rules for OpenAI GPT, Anthropic Claude, Google Gemini, DeepSeek, Z.AI GLM, Moonshot/Kimi, xAI Grok, Mistral, Cohere, Alibaba Qwen, and MiniMax.
 
 See the [complete generated catalog](docs/pricing-catalog.md) for every model, price, condition, caveat, and official source URL. The engine handles prompt-length tiers and DeepSeek's recurring UTC peak/off-peak windows. It deliberately does not guess broad future model families: a route without a matching rule remains visible as **UNPRICED** and is excluded from estimated spend, while the dashboard reports pricing coverage.
+
+Built-in rules try known provider/model routes first, then model-name fallbacks such as `*/glm-5.3`. A corporate or custom provider with a recognized model ID therefore gets a **public first-party list-price estimate**, not its actual negotiated bill. Provider names and model names in the statistics are preserved. Matching is case-insensitive; unknown model IDs are not guessed or renamed. All context tiers, validity dates, and UTC schedules also apply to fallbacks. A custom `pricing` array replaces the entire catalog (including fallbacks), so explicit corporate rates or an empty array remain authoritative.
 
 Rules are matched in order against `provider/model`; `*` is the only route wildcard. Prompt tiers use `minPromptTokens` / `maxPromptTokens`, while known promotions and retirements use inclusive `validFrom` / exclusive `validTo` ISO-8601 instants. Calls outside a known validity interval remain unpriced rather than silently inheriting an expired rate.
 
@@ -96,6 +98,12 @@ To override pricing or scan behavior, edit the existing `usage` row in `$DSH_HOM
 
 All amounts are USD per one million tokens. Reasoning tokens are already included in the provider's output bucket and are not counted again.
 
+## Session analytics
+
+The **Sessions** table shows token buckets, estimated cost, pricing coverage, model count, and calls for each session in the selected date range. Search by title, session ID, or provider/model route; sort by spend, tokens, calls, or title. Group sessions by their exact title to compare repeated tasks, or by creation day. Groups can be expanded to inspect their individual sessions. Search filters sessions before grouping, so group totals reflect only matching sessions.
+
+Titles come from saved session metadata, never reconstructed from prompts. Upgrading to session analytics invalidates the older title-less checkpoint (schema v1); the first scan rebuilds it as v2, so totals may initially be partial. Untitled sessions use `Session <id>`. Renames appear after the next confirmed scan. Costs and tokens include only calls inside the selected range, even when the session was created earlier; grouping by creation day does not change that usage window. Unknown prices remain **UNPRICED** or partially priced, including inside groups.
+
 ## Data semantics
 
 1. At plugin startup the Host lists sessions through `ctx.sessionPersistence.list()` on current DSH, or `listSnapshots()` on legacy DSH. The legacy API can reuse a disk checkpoint after its source-qualified revisions match the current store. Current handle-API revisions are only comparable within one service instance, so sessions are read again after restart rather than trusting an old checkpoint.
@@ -119,8 +127,8 @@ Only usage records and revisions are persisted, not pricing or timezone-specific
 - No analytics leave the Harness host.
 - No external telemetry or pricing requests are made.
 - The HTTP API is same-origin and read-only.
-- API output contains dates, route names, token counts, call/session counts, estimated costs, aggregate read-error count, and background scan status. It does not include prompts, responses, paths, or session IDs.
-- The local checkpoint contains session IDs, source-qualified revisions, timestamps, model routes, and token buckets only. It excludes workspace paths and conversation content; backend-owned opaque revisions may themselves encode storage identity. New cache directories are private (`0700`) and checkpoint files use `0600` on POSIX.
+- API output contains dates, route names, token counts, call/session counts, estimated costs, aggregate read-error count, and background scan status. Session analytics additionally exposes session IDs, saved titles, and creation times to the same-origin dashboard. Titles may themselves contain user-provided sensitive text; prompts, responses, and workspace paths are not included.
+- The local checkpoint contains session IDs, saved titles, source-qualified revisions, timestamps, model routes, and token buckets only. It excludes workspace paths and conversation content; backend-owned opaque revisions may themselves encode storage identity. New cache directories are private (`0700`) and checkpoint files use `0600` on POSIX.
 
 ## Development
 

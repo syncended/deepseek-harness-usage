@@ -1,10 +1,10 @@
 # Built-in pricing catalog
 
-Verified against official public pricing pages on **2026-08-26 UTC**. Prices are USD per one million tokens.
+Baseline verified against official public pricing pages on **2026-08-26 UTC**; DeepSeek V4.1 Flash updated for the 2026-09-10 04:00 UTC transition. Prices are USD per one million tokens.
 
 The catalog estimates standard, synchronous, first-party API usage. Batch/flex/priority modes, regional uplifts, negotiated discounts, subscriptions, tool-call fees, taxes, and cache-storage token-hours are excluded unless a row note explicitly says otherwise.
 
-Catalog entries: **130**. Generated route rules include provider aliases and context/time tiers.
+Catalog entries: **132**. Generated route rules include provider aliases, context/time tiers, and model-name fallbacks for custom providers.
 
 | Family / tier | Provider routes | Models | Input | Cache read | Cache write | Output | Match | Notes |
 |---|---|---|---:|---:|---:|---:|---|---|
@@ -63,8 +63,10 @@ Catalog entries: **130**. Generated route rules include provider aliases and con
 | Gemini 2.5 Pro | google, gemini, google-ai | gemini-2.5-pro | $1.25 | $0.125 | $1.25 | $10 | prompt ≤ 200,000 | Cache storage token-hours are excluded. |
 | Gemini 2.5 Flash | google, gemini, google-ai | gemini-2.5-flash | $0.3 | $0.03 | $0.3 | $2.5 | standard | Text/image/video rate; audio and cache storage are excluded. |
 | Gemini 2.5 Flash-Lite | google, gemini, google-ai | gemini-2.5-flash-lite | $0.1 | $0.01 | $0.1 | $0.4 | standard | Text/image/video rate; audio and cache storage are excluded. |
-| DeepSeek V4 Flash · peak | deepseek, deepseek-api, deepseek-official, eliza/deepseek | deepseek-v4-flash | $0.44 | $0.014 | $0.44 | $1.32 | inside listed UTC windows |  |
-| DeepSeek V4 Flash · off-peak | deepseek, deepseek-api, deepseek-official, eliza/deepseek | deepseek-v4-flash | $0.22 | $0.007 | $0.22 | $0.66 | outside listed UTC windows |  |
+| DeepSeek V4 Flash · peak | deepseek, deepseek-api, deepseek-official, eliza/deepseek | deepseek-v4-flash | $0.44 | $0.014 | $0.44 | $1.32 | inside listed UTC windows; before 2026-09-10T04:00:00.000Z |  |
+| DeepSeek V4 Flash · off-peak | deepseek, deepseek-api, deepseek-official, eliza/deepseek | deepseek-v4-flash | $0.22 | $0.007 | $0.22 | $0.66 | outside listed UTC windows; before 2026-09-10T04:00:00.000Z |  |
+| DeepSeek V4.1 Flash · peak | deepseek, deepseek-api, deepseek-official, eliza/deepseek | deepseek-flash, deepseek-v4-flash, deepseek-v4-flash-vision-exp | $0.3 | $0.006 | $0.3 | $1.2 | inside listed UTC windows; from 2026-09-10T04:00:00.000Z | New Flash rates and legacy Flash aliases from 2026-09-10 04:00 UTC: https://api-docs.deepseek.com/news/news260910/. Current pricing page retains V4 Pro at its own unchanged rates. |
+| DeepSeek V4.1 Flash · off-peak | deepseek, deepseek-api, deepseek-official, eliza/deepseek | deepseek-flash, deepseek-v4-flash, deepseek-v4-flash-vision-exp | $0.15 | $0.003 | $0.15 | $0.6 | outside listed UTC windows; from 2026-09-10T04:00:00.000Z | New Flash rates and legacy Flash aliases from 2026-09-10 04:00 UTC: https://api-docs.deepseek.com/news/news260910/. Current pricing page retains V4 Pro at its own unchanged rates. |
 | DeepSeek V4 Pro · peak | deepseek, deepseek-api, deepseek-official, eliza/deepseek | deepseek-v4-pro | $1.32 | $0.044 | $1.32 | $3.96 | inside listed UTC windows |  |
 | DeepSeek V4 Pro · off-peak | deepseek, deepseek-api, deepseek-official, eliza/deepseek | deepseek-v4-pro | $0.66 | $0.022 | $0.66 | $1.98 | outside listed UTC windows |  |
 | DeepSeek Chat legacy | deepseek | deepseek-chat | $0.28 | $0.028 | $0.28 | $0.42 | before 2026-07-24T16:00:00.000Z | Retired after 2026-07-24 15:59 UTC; retained for historical logs. |
@@ -161,6 +163,7 @@ Catalog entries: **130**. Generated route rules include provider aliases and con
 - Known promotions and retirements use inclusive `validFrom` / exclusive `validTo` instants; calls outside them remain unpriced unless a successor rule is published.
 - Anthropic cache writes use the 5-minute rate because Harness usage records do not expose cache TTL.
 - Qwen cache reads use the implicit-cache rate; explicit cache hits can be cheaper.
-- Unknown routes remain unpriced rather than inheriting a broad family wildcard.
+- Known provider routes take precedence; custom providers with recognized model names use first-party list-price estimates, not negotiated corporate rates.
+- Unknown model IDs remain unpriced rather than inheriting a broad family wildcard.
 - A custom `pricing` array replaces the built-in catalog for that plugin instance.
 

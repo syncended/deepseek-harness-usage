@@ -66,6 +66,7 @@ function sanitizeEntries(value: unknown): Map<string, CachedSession> {
       usage: {
         sessionId,
         createdAt: timestamp(usage.createdAt),
+        ...(usage.title === undefined ? {} : { title: string(usage.title) }),
         records: usage.records.map((record: unknown) => sanitizeRecord(record, sessionId)),
       },
     })
@@ -89,14 +90,16 @@ export async function loadCheckpoint(path: string): Promise<Map<string, CachedSe
     invalid()
   }
   const checkpoint = object(parsed)
-  if (checkpoint.schemaVersion !== 1) invalid()
+  // v1 omitted titles: accepting its revisions would prevent metadata backfill.
+  // The scanner treats incompatible checkpoints as a cold scan, not a fatal error.
+  if (checkpoint.schemaVersion !== 2) invalid()
   return sanitizeEntries(checkpoint.entries)
 }
 
 export async function saveCheckpoint(path: string, entries: ReadonlyMap<string, CachedSession>): Promise<void> {
   // Validate and copy before touching disk; never serialize caller-owned objects.
   const sanitized = sanitizeEntries(Array.from(entries))
-  const contents = JSON.stringify({ schemaVersion: 1, entries: Array.from(sanitized) })
+  const contents = JSON.stringify({ schemaVersion: 2, entries: Array.from(sanitized) })
   const directory = dirname(path)
   await mkdir(directory, { recursive: true, mode: 0o700 })
   const temporary = join(directory, `.${basename(path)}.${randomUUID()}.tmp`)

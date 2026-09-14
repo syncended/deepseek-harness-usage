@@ -55,7 +55,7 @@ test('GPT-6 Astra prices every token bucket across the exact context boundary', 
     }
     assert.equal(priceFor(`${route}-unknown`, DEFAULT_PRICING, 100), undefined)
   }
-  assert.equal(priceFor('other/gpt-6-astra', DEFAULT_PRICING, 100), undefined)
+  assert.equal(priceFor('other/gpt-6-astra', DEFAULT_PRICING, 100)?.input, 10)
   assert.equal(priceFor('OPENAI/GPT-6-ASTRA', DEFAULT_PRICING, 100)?.input, 10)
 })
 
@@ -108,6 +108,45 @@ test('catalog enforces promotional validity boundaries', () => {
   assert.equal(priceFor('google/gemini-3.7-flash', DEFAULT_PRICING, 100, afterPromotion)?.input, 1.5)
   assert.equal(priceFor('openai/gpt-5.6-sol', DEFAULT_PRICING, 100, Date.parse('2026-11-21T23:59:59Z'))?.input, 4)
   assert.equal(priceFor('openai/gpt-5.6-sol', DEFAULT_PRICING, 100, Date.parse('2026-11-22T00:00:00Z')), undefined)
+})
+
+test('DeepSeek V4.1 Flash prices new and legacy aliases at the transition boundary', () => {
+  const transition = Date.parse('2026-09-10T04:00:00Z')
+  for (const provider of ['deepseek-official', 'work']) {
+    assert.equal(priceFor(`${provider}/deepseek-v4-flash`, DEFAULT_PRICING, 10, transition - 1)?.input, 0.44)
+    assert.equal(priceFor(`${provider}/deepseek-flash`, DEFAULT_PRICING, 10, transition - 1), undefined)
+    for (const model of ['deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp']) {
+      const price = priceFor(`${provider}/${model}`, DEFAULT_PRICING, 10, transition)
+      assert.deepEqual([price.input, price.cacheRead, price.cacheWrite, price.output], [0.15, 0.003, 0.15, 0.6])
+      assert.equal(priceFor(`${provider}/${model}`, DEFAULT_PRICING, 10, transition + 2 * 3600_000)?.output, 1.2)
+    }
+    // The current pricing page supersedes the earlier announced Pro migration.
+    assert.equal(priceFor(`${provider}/deepseek-v4-pro`, DEFAULT_PRICING, 10, Date.parse('2026-09-14T04:00:00Z'))?.output, 1.98)
+  }
+})
+
+test('custom providers use model list prices after provider-specific rules', () => {
+  const now = Date.parse('2026-08-24T02:00:00Z')
+  for (const provider of ['work', 'company/models', 'internal-openai']) {
+    const price = priceFor(`${provider}/GLM-5.3`, DEFAULT_PRICING, 100, now)
+    assert.equal(price?.route, '*/glm-5.3')
+    assert.deepEqual([price.input, price.cacheRead, price.cacheWrite, price.output], [1.4, 0.26, 1.4, 4.4])
+  }
+  assert.equal(priceFor('zai/glm-5.3', DEFAULT_PRICING, 100, now)?.route, 'zai/glm-5.3')
+  assert.equal(priceFor('work/glm-5.3-unknown', DEFAULT_PRICING, 100, now), undefined)
+  assert.equal(priceFor('work/private-model', DEFAULT_PRICING, 100, now), undefined)
+  assert.equal(priceFor('work/gpt-6-astra', DEFAULT_PRICING, 272_001, now)?.input, 20)
+  assert.equal(priceFor('work/deepseek-v4-pro', DEFAULT_PRICING, 100, now)?.input, 1.32)
+  assert.equal(priceFor('work/deepseek-v4-pro', DEFAULT_PRICING, 100, now + 3 * 3600_000)?.input, 0.66)
+  assert.equal(priceFor('work/deepseek-chat', DEFAULT_PRICING, 100, now), undefined)
+  assert.equal(priceFor('work/gpt-5.6-sol', DEFAULT_PRICING, 100, Date.parse('2026-11-22T00:00:00Z')), undefined)
+
+  const override = { route: 'work/glm-5.3', input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  assert.equal(priceFor(override.route, [override, ...DEFAULT_PRICING], 100, now), override)
+  assert.equal(priceFor('work/glm-5.3', [], 100, now), undefined)
+  assert.equal(priceFor('work/glm-5.3', [override], 100, now), override)
+  assert.equal(priceFor('other/glm-5.3', [override], 100, now), undefined)
+  assert.equal(priceFor('work/glm-5.3', Config({}).pricing, 100, now)?.input, 1.4)
 })
 
 test('pricing validation rejects ambiguous or impossible conditions', () => {

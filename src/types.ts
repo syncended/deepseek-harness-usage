@@ -62,6 +62,8 @@ export interface UsageRecord extends UsageBuckets {
 export interface SessionUsage {
   sessionId: string
   createdAt: number
+  /** Explicit durable title only; never derived from prompt content. */
+  title?: string
   cwd?: string
   records: UsageRecord[]
 }
@@ -84,6 +86,19 @@ export interface UsageModel extends UsageBuckets {
   cost: number
   pricedTokens: number
   totalTokens: number
+}
+
+/** Per-session totals restricted to the snapshot's selected range. */
+export interface UsageSession extends UsageBuckets {
+  sessionId: string
+  title: string
+  createdAt: number
+  totalTokens: number
+  pricedTokens: number
+  cost: number
+  calls: number
+  modelCount: number
+  routes: string[]
 }
 
 export interface UsageSummary extends UsageBuckets {
@@ -116,6 +131,7 @@ export interface UsageSnapshot {
   trend: UsageDay[]
   heatmap: UsageDay[]
   models: UsageModel[]
+  sessions: UsageSession[]
   errors: number
   scan?: UsageScanStatus
 }

@@ -1,7 +1,7 @@
 import { setImmediate as yieldToHost } from 'node:timers/promises'
 import type { SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionPersistenceSnapshot } from '@deepseek-ai/dsh-session-persistence'
-import { extractSessionUsage } from './aggregate.js'
+import { extractSessionUsage, sessionTitle } from './aggregate.js'
 import { loadCheckpoint, saveCheckpoint, type CachedSession } from './checkpoint.js'
 import type { SessionUsage, UsageScanStatus } from './types.js'
 
@@ -52,6 +52,15 @@ function adaptPersistence(persistence: LegacyPersistence | HandlePersistence) {
       }
     },
   }
+}
+
+function snapshotTitle(snapshot: SessionPersistenceSnapshot): string | undefined {
+  return sessionTitle(snapshot) ?? sessionTitle(snapshot.header)
+}
+
+function snapshotRevision(snapshot: SessionPersistenceSnapshot): string {
+  // Some legacy metadata stores rename sessions without changing the log revision.
+  return JSON.stringify([String(snapshot.revision), snapshotTitle(snapshot) ?? null])
 }
 
 interface ScannerOptions {
@@ -143,7 +152,7 @@ export class UsageScanner {
   }
 
   private reconcile(snapshots: readonly SessionPersistenceSnapshot[]): void {
-    this.revisions = new Map(snapshots.map((snapshot) => [String(snapshot.header.id), String(snapshot.revision)]))
+    this.revisions = new Map(snapshots.map((snapshot) => [String(snapshot.header.id), snapshotRevision(snapshot)]))
     // Revisions are source-qualified. Never expose entries from another store,
     // or unverified disk data, even while the initial scan is incomplete.
     if (this.restored !== undefined) {
@@ -194,7 +203,7 @@ export class UsageScanner {
     this.errors = 0
     this.failed = false
     const changed = snapshots.filter((snapshot) =>
-      this.cache.get(String(snapshot.header.id))?.revision !== String(snapshot.revision),
+      this.cache.get(String(snapshot.header.id))?.revision !== snapshotRevision(snapshot),
     )
 
     const pending = new Map<string, CachedSession>()
@@ -212,9 +221,12 @@ export class UsageScanner {
             const stored = await persistence.readFrom(snapshot.header.id, signal)
             if (signal.aborted) return
             const usage = extractSessionUsage(stored.meta, stored.events)
+            // Snapshot metadata is the current explicit name when a backend provides it.
+            const title = snapshotTitle(snapshot)
+            if (title !== undefined) usage.title = title
             // Do not retain workspace paths or raw log content in the projection.
             delete usage.cwd
-            pending.set(id, { revision: String(snapshot.revision), usage })
+            pending.set(id, { revision: snapshotRevision(snapshot), usage })
           } catch (error) {
             if (signal.aborted) return
             this.errors += 1

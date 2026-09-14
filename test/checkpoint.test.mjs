@@ -28,7 +28,7 @@ function cached(sessionId = 'session-a') {
 }
 
 function checkpoint() {
-  return { schemaVersion: 1, entries: [['session-a', cached()]] }
+  return { schemaVersion: 2, entries: [['session-a', cached()]] }
 }
 
 async function fixture(t) {
@@ -50,6 +50,7 @@ test('missing checkpoint returns an empty Map', async (t) => {
 test('checkpoint roundtrips sessions, revisions, empty records and safe integer boundaries', async (t) => {
   const { path } = await fixture(t)
   const first = cached()
+  first.usage.title = 'Сессия: аналитика'
   first.usage.createdAt = -8_640_000_000_000_000
   first.usage.records[0].timestamp = 8_640_000_000_000_000
   first.usage.records[0].input = Number.MAX_SAFE_INTEGER
@@ -59,7 +60,7 @@ test('checkpoint roundtrips sessions, revisions, empty records and safe integer 
   await saveCheckpoint(path, expected)
   assert.deepEqual(await loadCheckpoint(path), expected)
   const disk = JSON.parse(await readFile(path, 'utf8'))
-  assert.equal(disk.schemaVersion, 1)
+  assert.equal(disk.schemaVersion, 2)
   assert.equal(disk.entries.length, 2)
 })
 
@@ -78,16 +79,16 @@ test('incompatible versions and malformed checkpoint shapes are rejected', async
   const { path } = await fixture(t)
   const invalid = [
     null, [], {},
-    { schemaVersion: 2, entries: [] },
+    { schemaVersion: 1, entries: [] },
     { schemaVersion: '1', entries: [] },
-    { schemaVersion: 1, entries: {} },
-    { schemaVersion: 1, entries: [null] },
-    { schemaVersion: 1, entries: [['session-a']] },
-    { schemaVersion: 1, entries: [['session-a', cached(), 'extra']] },
-    { schemaVersion: 1, entries: [[3, cached()]] },
-    { schemaVersion: 1, entries: [['session-a', null]] },
-    { schemaVersion: 1, entries: [['session-a', []]] },
-    { schemaVersion: 1, entries: [['session-a', cached()], ['session-a', cached()]] },
+    { schemaVersion: 2, entries: {} },
+    { schemaVersion: 2, entries: [null] },
+    { schemaVersion: 2, entries: [['session-a']] },
+    { schemaVersion: 2, entries: [['session-a', cached(), 'extra']] },
+    { schemaVersion: 2, entries: [[3, cached()]] },
+    { schemaVersion: 2, entries: [['session-a', null]] },
+    { schemaVersion: 2, entries: [['session-a', []]] },
+    { schemaVersion: 2, entries: [['session-a', cached()], ['session-a', cached()]] },
   ]
   for (const value of invalid) {
     await put(path, value)
@@ -105,6 +106,8 @@ test('loaded session and record fields are strictly validated', async (t) => {
     (entry) => { entry.usage.sessionId = 'mismatch' },
     (entry) => { entry.usage.sessionId = 1 },
     (entry) => { entry.usage.createdAt = '2026-01-02' },
+    (entry) => { entry.usage.title = { prompt: 'PRIVATE' } },
+    (entry) => { entry.usage.title = null },
     (entry) => { entry.usage.createdAt = 8_640_000_000_000_001 },
     (entry) => { entry.usage.createdAt = -8_640_000_000_000_001 },
     (entry) => { entry.usage.records = {} },
@@ -154,7 +157,7 @@ test('load and save strip cwd and all extras without mutating callers', async (t
   assert.equal(dirty.usage.cwd, '/private/project')
   assert.equal(dirty.usage.records[0].content, 'PRIVATE_PROMPT_CONTENT')
   delete dirty.usage.toJSON
-  await put(path, { schemaVersion: 1, prompt: 'PRIVATE_PROMPT_CONTENT', entries: [['session-a', dirty]] })
+  await put(path, { schemaVersion: 2, prompt: 'PRIVATE_PROMPT_CONTENT', entries: [['session-a', dirty]] })
   assert.deepEqual(await loadCheckpoint(path), new Map([['session-a', expected]]))
 })
 

@@ -9,6 +9,7 @@ import type {
   UsageRange,
   UsageRecord,
   UsageSnapshot,
+  UsageSession,
 } from './types.js'
 import { DEFAULT_PRICING } from './pricing-catalog.js'
 
@@ -51,9 +52,20 @@ function assistantRoute(event: SessionEvent): { provider: string; model: string 
   return routeFrom(message.source)
 }
 
+/** Read only explicit title metadata, never messages or prompt previews. */
+export function sessionTitle(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const metadata = value as { title?: unknown; name?: unknown }
+  for (const candidate of [metadata.title, metadata.name]) {
+    if (typeof candidate === 'string' && candidate.trim() !== '') return candidate.trim()
+  }
+  return undefined
+}
+
 /** Fold one durable session into billable provider usage samples. */
 export function extractSessionUsage(meta: SessionHeader, events: readonly SessionEvent[]): SessionUsage {
   let currentRoute: { provider: string; model: string } | null = null
+  let title = sessionTitle(meta)
   const samples = new Map<string, UsageRecord>()
   const stepStarts = new Map<string, number>()
   const compactionStarts = new Map<string, number>()
@@ -71,6 +83,11 @@ export function extractSessionUsage(meta: SessionHeader, events: readonly Sessio
       continue
     }
     if (index < seedLength) continue
+    // Title events are owned by an optional Host package absent from older peers.
+    if ((event as { type: string }).type === 'session/title') {
+      title = sessionTitle(event.data) ?? title
+      continue
+    }
     if (event.type === 'step/start') {
       stepStarts.set(`${event.data.turn}:${event.data.step}`, event.time)
       continue
@@ -122,6 +139,7 @@ export function extractSessionUsage(meta: SessionHeader, events: readonly Sessio
   return {
     sessionId: String(meta.id),
     createdAt: meta.createdAt,
+    ...(title === undefined ? {} : { title }),
     ...(meta.cwd === undefined ? {} : { cwd: meta.cwd }),
     records: [...samples.values()].sort((left, right) => left.timestamp - right.timestamp),
   }
@@ -277,6 +295,7 @@ export function aggregateUsage(
   const dailySessions = new Map<string, Set<string>>()
   const rangeSessionIds = new Set<string>()
   const modelRows = new Map<string, UsageModel & { sessionIds: Set<string> }>()
+  const sessionRows = new Map<string, UsageSession & { routeSet: Set<string> }>()
 
   for (const session of sessions) {
     for (const record of session.records) {
@@ -304,6 +323,27 @@ export function aggregateUsage(
       }
       if (date < startDate) continue
       rangeSessionIds.add(record.sessionId)
+      let sessionRow = sessionRows.get(record.sessionId)
+      if (sessionRow === undefined) {
+        sessionRow = {
+          sessionId: record.sessionId,
+          title: sessionTitle(session) ?? `Session ${record.sessionId}`,
+          createdAt: session.createdAt,
+          input: 0, output: 0, cacheRead: 0, cacheWrite: 0,
+          totalTokens: 0, pricedTokens: 0, cost: 0, calls: 0,
+          modelCount: 0, routes: [], routeSet: new Set<string>(),
+        }
+        sessionRows.set(record.sessionId, sessionRow)
+      }
+      sessionRow.input += record.input
+      sessionRow.output += record.output
+      sessionRow.cacheRead += record.cacheRead
+      sessionRow.cacheWrite += record.cacheWrite
+      sessionRow.totalTokens += totalTokens
+      sessionRow.pricedTokens += pricedTokens
+      sessionRow.cost += cost
+      sessionRow.calls += 1
+      sessionRow.routeSet.add(route)
       let model = modelRows.get(route)
       if (model === undefined) {
         model = {
@@ -374,6 +414,9 @@ export function aggregateUsage(
     trend,
     heatmap,
     models,
+    sessions: [...sessionRows.values()]
+      .map(({ routeSet, ...session }) => ({ ...session, routes: [...routeSet].sort(), modelCount: routeSet.size }))
+      .sort((left, right) => right.cost - left.cost || right.totalTokens - left.totalTokens || left.sessionId.localeCompare(right.sessionId)),
     errors,
   }
 }

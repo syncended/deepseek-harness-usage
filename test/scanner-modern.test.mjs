@@ -186,6 +186,24 @@ test('modern confirmation rejects revision races after read handles close', asyn
   assert.equal(tokens(scanner), 10)
 })
 
+test('modern titles exclude inherited names and follow durable renames', async (t) => {
+  const persistence = store()
+  persistence.events = [
+    { type: 'session/title', seq: 0, time: Date.now(), data: { title: 'Parent title' } },
+    persistence.events[1],
+    { type: 'session/title', seq: 2, time: Date.now(), data: { title: 'Название сессии' } },
+  ]
+  const { scanner, options } = await setup(t, persistence)
+  await scanner.refresh()
+  assert.equal(scanner.sessions[0].title, 'Название сессии')
+  assert.equal((await loadCheckpoint(options.cachePath)).get('modern').usage.title, 'Название сессии')
+  persistence.events.push({ type: 'session/title', seq: 3, time: Date.now(), data: { title: 'Renamed' } })
+  persistence.revision = 'instance-local:2'
+  await scanner.refresh()
+  assert.equal(scanner.sessions[0].title, 'Renamed')
+  assert.equal(tokens(scanner), 10)
+})
+
 test('modern list errors report failed indexing rather than falling back to a different API', async (t) => {
   const persistence = store()
   persistence.list = async () => { throw new Error('offline') }

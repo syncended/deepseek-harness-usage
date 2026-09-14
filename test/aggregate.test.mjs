@@ -90,6 +90,54 @@ test('aggregateUsage builds dense trends, heatmap, model rows, and cost coverage
   assert.equal(snapshot.trend.at(-3).calls, 1)
 })
 
+test('session rows preserve per-call prices, selected range, identity and privacy', () => {
+  const record = (sessionId, date, model = 'priced') => ({ sessionId, timestamp: day(date), provider: 'custom', model, input: 1_000_000, output: 100_000, cacheRead: 200_000, cacheWrite: 50_000 })
+  const sessions = [
+    { sessionId: 'a', title: 'Same name', createdAt: day('2025-01-01'), cwd: '/private', messages: ['SECRET'], records: [record('a', '2026-08-02'), record('a', '2026-08-03', 'unknown'), record('a', '2026-01-01')] },
+    { sessionId: 'b', title: 'Same name', createdAt: day('2026-08-01'), records: [record('b', '2026-08-02')] },
+    { sessionId: 'c', title: ' ', createdAt: day('2026-08-01'), records: [record('c', '2026-08-03', 'unknown')] },
+    { sessionId: 'empty', createdAt: day('2026-08-01'), records: [] },
+  ]
+  const prices = [{ route: 'custom/priced', input: 1, output: 10, cacheRead: 0.5, cacheWrite: 2 }]
+  const snapshot = aggregateUsage(sessions, prices, '30d', 'UTC', day('2026-08-03'))
+  assert.equal(snapshot.sessions.length, snapshot.summary.sessions)
+  assert.deepEqual(snapshot.sessions.map((row) => row.sessionId), ['a', 'b', 'c'])
+  assert.deepEqual(snapshot.sessions[0], { sessionId: 'a', title: 'Same name', createdAt: day('2025-01-01'), input: 2_000_000, output: 200_000, cacheRead: 400_000, cacheWrite: 100_000, totalTokens: 2_700_000, pricedTokens: 1_350_000, cost: 2.2, calls: 2, modelCount: 2, routes: ['custom/priced', 'custom/unknown'] })
+  assert.equal(snapshot.sessions[2].title, 'Session c')
+  for (const field of ['input', 'output', 'cacheRead', 'cacheWrite', 'totalTokens', 'pricedTokens', 'calls', 'cost']) {
+    assert.equal(snapshot.sessions.reduce((sum, row) => sum + row[field], 0), snapshot.summary[field], field)
+  }
+  assert.doesNotMatch(JSON.stringify(snapshot), /SECRET|private|messages|records|cwd/)
+  assert.deepEqual(aggregateUsage([], prices, 'all', 'UTC', day('2026-08-03')).sessions, [])
+})
+
+test('session title extraction supports metadata, latest events and safe fallbacks', () => {
+  const meta = { id: 'title', createdAt: day('2026-08-01'), version: 1, title: ' Legacy title ' }
+  assert.equal(extractSessionUsage(meta, []).title, 'Legacy title')
+  assert.equal(extractSessionUsage({ ...meta, title: undefined, name: 'Legacy name' }, []).title, 'Legacy name')
+  const events = [
+    event('session/title', 0, meta.createdAt, { title: 'Parent title' }),
+    event('user/message', 1, meta.createdAt, { message: { content: 'SECRET PROMPT' } }),
+    event('session/title', 2, meta.createdAt, { title: 'Автоматическое имя' }),
+    event('session/title', 3, meta.createdAt, { title: ' Renamed session ', messageSeqs: [1], source: { kind: 'user' } }),
+    event('session/title', 4, meta.createdAt, { title: { content: 'SECRET PROMPT' } }),
+  ]
+  assert.equal(extractSessionUsage(meta, events).title, 'Renamed session')
+  const inherited = extractSessionUsage({ ...meta, title: undefined, seedLength: 5 }, events)
+  assert.equal(inherited.title, undefined)
+  assert.doesNotMatch(JSON.stringify(inherited), /SECRET|Parent title|Renamed session/)
+})
+
+test('custom provider catalog pricing reaches model and session rows without rewriting routes', () => {
+  const session = { sessionId: 'custom', title: 'Custom gateway', createdAt: day('2026-08-03'), records: [{ sessionId: 'custom', timestamp: day('2026-08-03'), provider: 'private-gateway', model: 'glm-5.3', input: 1_000_000, output: 50, cacheRead: 10, cacheWrite: 0 }] }
+  const snapshot = aggregateUsage([session], DEFAULT_PRICING, '30d', 'UTC', day('2026-08-03'))
+  assert.ok(snapshot.sessions[0].cost > 0)
+  assert.equal(snapshot.sessions[0].cost, snapshot.models[0].cost)
+  assert.deepEqual(snapshot.sessions[0].routes, ['private-gateway/glm-5.3'])
+  assert.equal(snapshot.models[0].provider, 'private-gateway')
+  assert.equal(snapshot.models[0].model, 'glm-5.3')
+})
+
 test('priceFor supports case-insensitive star globs', () => {
   const price = { route: 'Provider/gpt-*', input: 1, output: 2, cacheRead: 0, cacheWrite: 0 }
   assert.equal(priceFor('provider/GPT-test', [price]), price)

@@ -81,6 +81,34 @@ test('persists confirmed projections and rereads only changed/new sessions acros
   assert.equal((await loadCheckpoint(options.cachePath)).size, 2)
 })
 
+test('legacy metadata-only renames invalidate projections and survive checkpoint restore', async (t) => {
+  const persistence = store()
+  persistence.sessions.get('0').meta.title = 'Original'
+  const { scanner, options } = await setup(t, persistence)
+  await scanner.refresh()
+  assert.equal(scanner.sessions[0].title, 'Original')
+  persistence.sessions.get('0').meta.title = 'Renamed without log revision'
+  await scanner.refresh()
+  assert.equal(scanner.sessions[0].title, 'Renamed without log revision')
+  assert.equal(persistence.reads.length, 2)
+  const restored = new UsageScanner(options)
+  t.after(() => restored.stop())
+  await restored.refresh()
+  assert.equal(restored.sessions[0].title, 'Renamed without log revision')
+  assert.equal(persistence.reads.length, 2)
+})
+
+test('old title-less checkpoints force a full metadata backfill', async (t) => {
+  const persistence = store()
+  persistence.sessions.get('0').meta.title = 'Backfilled'
+  const { scanner, options } = await setup(t, persistence)
+  await writeFile(options.cachePath, JSON.stringify({ schemaVersion: 1, entries: [['0', { revision: 'source:1', usage: { sessionId: '0', createdAt: Date.now(), records: [] } }]] }))
+  await scanner.refresh()
+  assert.equal(persistence.reads.length, 1)
+  assert.equal(scanner.sessions[0].title, 'Backfilled')
+  assert.equal(tokens(scanner), 10)
+})
+
 test('startup runs without a Usage request, publishes/checkpoints batches and shares in-flight scan', async (t) => {
   const persistence = store(3)
   const blocked = deferred()
