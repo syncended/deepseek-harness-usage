@@ -27,6 +27,16 @@ test('client renders all primary analytics surfaces', () => {
   }
 })
 
+test('analytics uses readable typography and preserves money columns on small screens', () => {
+  assert.match(client, /\.dsh-usage-workspace\{font-size:16px;line-height:1\.5/)
+  assert.match(client, /\.dsh-usage-session-table\{font-size:16px;line-height:1\.5;min-width:820px/)
+  assert.match(client, /\.dsh-usage-session-meta[^\n]+font-size:13px;line-height:1\.5/)
+  assert.match(client, /\.dsh-usage-segment button[^\n]+white-space:nowrap/)
+  assert.match(client, /\.dsh-usage-chart-scroll\{overflow-x:auto/)
+  assert.match(client, /@container\(max-width:560px\)/)
+  assert.doesNotMatch(client, /\.dsh-usage-model-row>[^}]+display:none/)
+})
+
 test('trend and activity views expose visible interactive details', () => {
   assert.match(client, /dsh-usage-chart-tooltip/)
   assert.match(client, /onPointerMove: selectAtPointer/)
