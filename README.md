@@ -16,7 +16,8 @@ A local-first DeepSeek Harness plugin for token usage, estimated model cost, tre
 - 30-day, 90-day, one-year, and all-time ranges.
 - Clearly separated API estimates, Codex API equivalents, and unavailable actual charges, alongside tokens, calls, sessions, and active days.
 - Interactive trend chart for tokens, estimated cost, or calls, with pointer and keyboard tooltips.
-- Input/output/cache token mix.
+- Circular SVG input/output/cache token mix with separate compact-number units and a responsive legend.
+- Labels, numbers, USD formatting, dates, and sorting follow the Web UI language (`<html lang>`, maintained by DSH), not the browser's unrelated locale. English and Simplified Chinese match DSH's built-in languages; missing/unsupported languages fall back consistently to English. Language changes update the open panel and sidebar without resetting filters or refetching usage. Session titles and route IDs are never translated.
 - Interactive 365-day activity heatmap with token/cost/call color modes, quartile intensity levels, and per-day details.
 - Per-provider/model usage, session count, call count, token volume, and estimated cost.
 - Browser timezone-aware day grouping.
