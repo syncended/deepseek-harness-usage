@@ -107,7 +107,26 @@ test('catalog enforces promotional validity boundaries', () => {
   assert.equal(priceFor('google/gemini-3.7-flash', DEFAULT_PRICING, 100, duringPromotion)?.input, 0.75)
   assert.equal(priceFor('google/gemini-3.7-flash', DEFAULT_PRICING, 100, afterPromotion)?.input, 1.5)
   assert.equal(priceFor('openai/gpt-5.6-sol', DEFAULT_PRICING, 100, Date.parse('2026-11-21T23:59:59Z'))?.input, 4)
-  assert.equal(priceFor('openai/gpt-5.6-sol', DEFAULT_PRICING, 100, Date.parse('2026-11-22T00:00:00Z')), undefined)
+  assert.equal(priceFor('openai/gpt-5.6-sol', DEFAULT_PRICING, 100, Date.parse('2026-11-22T00:00:00Z'))?.input, 4)
+})
+
+test('Sol historical calls are not excluded by catalog verification dates', () => {
+  for (const provider of ['openai', 'openai-codex', 'company']) {
+    for (const date of ['2026-08-15', '2026-08-25', '2026-08-26', '2026-11-22']) {
+      for (const [prompt, expected] of [[100_000, [4, 0.4, 5, 20]], [272_000, [8, 0.8, 10, 30]]]) {
+        const price = priceFor(`${provider}/gpt-5.6-sol`, DEFAULT_PRICING, prompt, Date.parse(`${date}T12:00:00Z`))
+        assert.ok(price, `${provider} ${date} ${prompt}`)
+        assert.deepEqual([price.input, price.cacheRead, price.cacheWrite, price.output], expected)
+        assert.equal(price.validFrom, undefined)
+        assert.equal(price.validTo, undefined)
+      }
+    }
+  }
+  // Explicit user-supplied billing boundaries must remain authoritative.
+  const custom = [{ route: 'openai-codex/gpt-5.6-sol', input: 4, output: 20, cacheRead: 0.4, cacheWrite: 5,
+    validFrom: '2026-08-26T00:00:00Z', validTo: '2026-11-22T00:00:00Z' }]
+  assert.equal(priceFor(custom[0].route, custom, 100, Date.parse('2026-08-25T23:59:59Z')), undefined)
+  assert.equal(priceFor(custom[0].route, custom, 100, Date.parse('2026-11-22T00:00:00Z')), undefined)
 })
 
 test('DeepSeek V4.1 Flash prices new and legacy aliases at the transition boundary', () => {
@@ -139,7 +158,7 @@ test('custom providers use model list prices after provider-specific rules', () 
   assert.equal(priceFor('work/deepseek-v4-pro', DEFAULT_PRICING, 100, now)?.input, 1.32)
   assert.equal(priceFor('work/deepseek-v4-pro', DEFAULT_PRICING, 100, now + 3 * 3600_000)?.input, 0.66)
   assert.equal(priceFor('work/deepseek-chat', DEFAULT_PRICING, 100, now), undefined)
-  assert.equal(priceFor('work/gpt-5.6-sol', DEFAULT_PRICING, 100, Date.parse('2026-11-22T00:00:00Z')), undefined)
+  assert.equal(priceFor('work/gpt-5.6-sol', DEFAULT_PRICING, 100, Date.parse('2026-11-22T00:00:00Z'))?.input, 4)
 
   const override = { route: 'work/glm-5.3', input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
   assert.equal(priceFor(override.route, [override, ...DEFAULT_PRICING], 100, now), override)

@@ -119,8 +119,7 @@ addContextTiered('openai', 'GPT-6 Astra', OPENAI, ['gpt-6-astra'], 272_001,
 addContextTiered('openai', 'GPT-5.6 Sol', OPENAI, ['gpt-5.6-sol'], 272_000,
   { input: 4, cacheRead: 0.4, cacheWrite: 5, output: 20 },
   { input: 8, cacheRead: 0.8, cacheWrite: 10, output: 30 },
-  'Standard synchronous tier; promotional through at least 2026-11-21.',
-  { validFrom: '2026-08-26T00:00:00.000Z', validTo: '2026-11-22T00:00:00.000Z' })
+  'Standard synchronous list-price estimate, including historical calls. Promotional through at least 2026-11-21; no confirmed start or expiry is published. The catalog verification date is not a billing boundary.')
 addContextTiered('openai', 'GPT-5.6 Terra', OPENAI, ['gpt-5.6-terra'], 272_000,
   { input: 2, cacheRead: 0.2, cacheWrite: 2.5, output: 12 },
   { input: 4, cacheRead: 0.4, cacheWrite: 5, output: 18 })

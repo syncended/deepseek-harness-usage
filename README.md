@@ -63,7 +63,7 @@ Built-in rules try known provider/model routes first, then model-name fallbacks 
 
 Rules are matched in order against `provider/model`; `*` is the only route wildcard. Prompt tiers use `minPromptTokens` / `maxPromptTokens`, while known promotions and retirements use inclusive `validFrom` / exclusive `validTo` ISO-8601 instants. Calls outside a known validity interval remain unpriced rather than silently inheriting an expired rate.
 
-Pricing changes over time, and batch/flex/priority service tiers, regional uplifts, negotiated rates, subscription plans, tool fees, and cache-storage duration may not map to token billing, so override the catalog for your environment when necessary. Current rules without an explicit validity interval remain current-list-price estimates rather than a historical invoice reconstruction.
+Pricing changes over time, and batch/flex/priority service tiers, regional uplifts, negotiated rates, subscription plans, tool fees, and cache-storage duration may not map to token billing, so override the catalog for your environment when necessary. Current rules without an explicit validity interval remain current-list-price estimates rather than a historical invoice reconstruction. In particular, GPT-5.6 Sol uses its published rates for older sessions too: the catalog verification date is not a price start date, and “at least through November 21” is not a confirmed expiry.
 
 To override pricing or scan behavior, edit the existing `usage` row in `$DSH_HOME/profiles/web/cordis.patch.yml`; do not add a duplicate row with the same id. Restart the Host after changing it:
 

@@ -10,8 +10,8 @@ Catalog entries: **132**. Generated route rules include provider aliases, contex
 |---|---|---|---:|---:|---:|---:|---|---|
 | GPT-6 Astra · long context | openai, openai-codex | gpt-6-astra | $20 | $2 | $25 | $75 | prompt ≥ 272,001 | Standard synchronous tier; long-context rates apply to the full request above 272K input tokens. See https://developers.openai.com/api/docs/models/gpt-6-astra. |
 | GPT-6 Astra | openai, openai-codex | gpt-6-astra | $10 | $1 | $12.5 | $50 | prompt ≤ 272,000 | Standard synchronous tier; long-context rates apply to the full request above 272K input tokens. See https://developers.openai.com/api/docs/models/gpt-6-astra. |
-| GPT-5.6 Sol · long context | openai, openai-codex | gpt-5.6-sol | $8 | $0.8 | $10 | $30 | prompt ≥ 272,000; from 2026-08-26T00:00:00.000Z; before 2026-11-22T00:00:00.000Z | Standard synchronous tier; promotional through at least 2026-11-21. |
-| GPT-5.6 Sol | openai, openai-codex | gpt-5.6-sol | $4 | $0.4 | $5 | $20 | prompt ≤ 271,999; from 2026-08-26T00:00:00.000Z; before 2026-11-22T00:00:00.000Z | Standard synchronous tier; promotional through at least 2026-11-21. |
+| GPT-5.6 Sol · long context | openai, openai-codex | gpt-5.6-sol | $8 | $0.8 | $10 | $30 | prompt ≥ 272,000 | Standard synchronous list-price estimate, including historical calls. Promotional through at least 2026-11-21; no confirmed start or expiry is published. The catalog verification date is not a billing boundary. |
+| GPT-5.6 Sol | openai, openai-codex | gpt-5.6-sol | $4 | $0.4 | $5 | $20 | prompt ≤ 271,999 | Standard synchronous list-price estimate, including historical calls. Promotional through at least 2026-11-21; no confirmed start or expiry is published. The catalog verification date is not a billing boundary. |
 | GPT-5.6 Terra · long context | openai, openai-codex | gpt-5.6-terra | $4 | $0.4 | $5 | $18 | prompt ≥ 272,000 |  |
 | GPT-5.6 Terra | openai, openai-codex | gpt-5.6-terra | $2 | $0.2 | $2.5 | $12 | prompt ≤ 271,999 |  |
 | GPT-5.6 Luna · long context | openai, openai-codex | gpt-5.6-luna | $0.4 | $0.04 | $0.5 | $1.8 | prompt ≥ 272,000 |  |
