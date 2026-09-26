@@ -59,6 +59,28 @@ test('GPT-6 Astra prices every token bucket across the exact context boundary', 
   assert.equal(priceFor('OPENAI/GPT-6-ASTRA', DEFAULT_PRICING, 100)?.input, 10)
 })
 
+test('GPT-6 Sol and Luna price all token buckets at the 272K context boundary', () => {
+  for (const [model, short, long] of [
+    ['gpt-6-sol', [2, 0.2, 2.5, 10], [4, 0.4, 5, 15]],
+    ['gpt-6-luna', [0.1, 0.01, 0.125, 0.5], [0.2, 0.02, 0.25, 0.75]],
+  ]) {
+    for (const provider of ['openai', 'openai-codex', 'work']) {
+      const route = `${provider}/${model}`
+      for (const [promptTokens, expected] of [[0, short], [272_000, short], [272_001, long], [922_000, long]]) {
+        const price = priceFor(route, DEFAULT_PRICING, promptTokens)
+        assert.ok(price, `${route} at ${promptTokens}`)
+        assert.deepEqual([price.input, price.cacheRead, price.cacheWrite, price.output], expected)
+      }
+      assert.equal(priceFor(`${route}-unknown`, DEFAULT_PRICING, 100), undefined)
+    }
+    assert.deepEqual(
+      [priceFor(`OPENAI/${model.toUpperCase()}`, Config({}).pricing, 100)?.input,
+        priceFor(`work/${model}`, Config({}).pricing, 272_001)?.output],
+      [short[0], long[3]],
+    )
+  }
+})
+
 test('catalog selects DeepSeek peak and off-peak UTC rates', () => {
   const mondayPeak = Date.parse('2026-08-24T02:00:00Z')
   const mondayOffPeak = Date.parse('2026-08-24T05:00:00Z')

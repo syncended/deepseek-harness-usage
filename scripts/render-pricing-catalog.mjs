@@ -22,7 +22,7 @@ const escape = (value) => String(value).replaceAll('|', '\\|').replaceAll('\n', 
 const lines = [
   '# Built-in pricing catalog',
   '',
-  `Baseline verified against official public pricing pages on **${PRICING_CATALOG_VERIFIED_AT} UTC**; DeepSeek V4.1 Flash updated for the 2026-09-10 04:00 UTC transition. Prices are USD per one million tokens.`,
+  `Baseline verified against official public pricing pages on **${PRICING_CATALOG_VERIFIED_AT} UTC**; DeepSeek V4.1 Flash updated for the 2026-09-10 04:00 UTC transition; GPT-6 Sol/Luna pricing verified on 2026-09-26 UTC. Prices are USD per one million tokens.`,
   '',
   'The catalog estimates standard, synchronous, first-party API usage. Batch/flex/priority modes, regional uplifts, negotiated discounts, subscriptions, tool-call fees, taxes, and cache-storage token-hours are excluded unless a row note explicitly says otherwise.',
   '',

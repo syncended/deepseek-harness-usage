@@ -116,6 +116,14 @@ addContextTiered('openai', 'GPT-6 Astra', OPENAI, ['gpt-6-astra'], 272_001,
   { input: 10, cacheRead: 1, cacheWrite: 12.5, output: 50 },
   { input: 20, cacheRead: 2, cacheWrite: 25, output: 75 },
   'Standard synchronous tier; long-context rates apply to the full request above 272K input tokens. See https://developers.openai.com/api/docs/models/gpt-6-astra.')
+addContextTiered('openai', 'GPT-6 Sol', OPENAI, ['gpt-6-sol'], 272_001,
+  { input: 2, cacheRead: 0.2, cacheWrite: 2.5, output: 10 },
+  { input: 4, cacheRead: 0.4, cacheWrite: 5, output: 15 },
+  'Standard synchronous tier; long-context rates apply to the full request above 272K input tokens. See https://developers.openai.com/api/docs/models/gpt-6-sol.')
+addContextTiered('openai', 'GPT-6 Luna', OPENAI, ['gpt-6-luna'], 272_001,
+  { input: 0.1, cacheRead: 0.01, cacheWrite: 0.125, output: 0.5 },
+  { input: 0.2, cacheRead: 0.02, cacheWrite: 0.25, output: 0.75 },
+  'Standard synchronous tier; long-context rates apply to the full request above 272K input tokens. See https://developers.openai.com/api/docs/models/gpt-6-luna.')
 addContextTiered('openai', 'GPT-5.6 Sol', OPENAI, ['gpt-5.6-sol'], 272_000,
   { input: 4, cacheRead: 0.4, cacheWrite: 5, output: 20 },
   { input: 8, cacheRead: 0.8, cacheWrite: 10, output: 30 },

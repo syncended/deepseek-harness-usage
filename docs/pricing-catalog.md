@@ -1,15 +1,19 @@
 # Built-in pricing catalog
 
-Baseline verified against official public pricing pages on **2026-08-26 UTC**; DeepSeek V4.1 Flash updated for the 2026-09-10 04:00 UTC transition. Prices are USD per one million tokens.
+Baseline verified against official public pricing pages on **2026-08-26 UTC**; DeepSeek V4.1 Flash updated for the 2026-09-10 04:00 UTC transition; GPT-6 Sol/Luna pricing verified on 2026-09-26 UTC. Prices are USD per one million tokens.
 
 The catalog estimates standard, synchronous, first-party API usage. Batch/flex/priority modes, regional uplifts, negotiated discounts, subscriptions, tool-call fees, taxes, and cache-storage token-hours are excluded unless a row note explicitly says otherwise.
 
-Catalog entries: **132**. Generated route rules include provider aliases, context/time tiers, and model-name fallbacks for custom providers.
+Catalog entries: **136**. Generated route rules include provider aliases, context/time tiers, and model-name fallbacks for custom providers.
 
 | Family / tier | Provider routes | Models | Input | Cache read | Cache write | Output | Match | Notes |
 |---|---|---|---:|---:|---:|---:|---|---|
 | GPT-6 Astra · long context | openai, openai-codex | gpt-6-astra | $20 | $2 | $25 | $75 | prompt ≥ 272,001 | Standard synchronous tier; long-context rates apply to the full request above 272K input tokens. See https://developers.openai.com/api/docs/models/gpt-6-astra. |
 | GPT-6 Astra | openai, openai-codex | gpt-6-astra | $10 | $1 | $12.5 | $50 | prompt ≤ 272,000 | Standard synchronous tier; long-context rates apply to the full request above 272K input tokens. See https://developers.openai.com/api/docs/models/gpt-6-astra. |
+| GPT-6 Sol · long context | openai, openai-codex | gpt-6-sol | $4 | $0.4 | $5 | $15 | prompt ≥ 272,001 | Standard synchronous tier; long-context rates apply to the full request above 272K input tokens. See https://developers.openai.com/api/docs/models/gpt-6-sol. |
+| GPT-6 Sol | openai, openai-codex | gpt-6-sol | $2 | $0.2 | $2.5 | $10 | prompt ≤ 272,000 | Standard synchronous tier; long-context rates apply to the full request above 272K input tokens. See https://developers.openai.com/api/docs/models/gpt-6-sol. |
+| GPT-6 Luna · long context | openai, openai-codex | gpt-6-luna | $0.2 | $0.02 | $0.25 | $0.75 | prompt ≥ 272,001 | Standard synchronous tier; long-context rates apply to the full request above 272K input tokens. See https://developers.openai.com/api/docs/models/gpt-6-luna. |
+| GPT-6 Luna | openai, openai-codex | gpt-6-luna | $0.1 | $0.01 | $0.125 | $0.5 | prompt ≤ 272,000 | Standard synchronous tier; long-context rates apply to the full request above 272K input tokens. See https://developers.openai.com/api/docs/models/gpt-6-luna. |
 | GPT-5.6 Sol · long context | openai, openai-codex | gpt-5.6-sol | $8 | $0.8 | $10 | $30 | prompt ≥ 272,000 | Standard synchronous list-price estimate, including historical calls. Promotional through at least 2026-11-21; no confirmed start or expiry is published. The catalog verification date is not a billing boundary. |
 | GPT-5.6 Sol | openai, openai-codex | gpt-5.6-sol | $4 | $0.4 | $5 | $20 | prompt ≤ 271,999 | Standard synchronous list-price estimate, including historical calls. Promotional through at least 2026-11-21; no confirmed start or expiry is published. The catalog verification date is not a billing boundary. |
 | GPT-5.6 Terra · long context | openai, openai-codex | gpt-5.6-terra | $4 | $0.4 | $5 | $18 | prompt ≥ 272,000 |  |

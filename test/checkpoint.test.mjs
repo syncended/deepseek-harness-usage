@@ -28,7 +28,7 @@ function cached(sessionId = 'session-a') {
 }
 
 function checkpoint() {
-  return { schemaVersion: 2, entries: [['session-a', cached()]] }
+  return { schemaVersion: 3, entries: [['session-a', cached()]], failures: [] }
 }
 
 async function fixture(t) {
@@ -42,9 +42,9 @@ async function put(path, value) {
   await writeFile(path, JSON.stringify(value))
 }
 
-test('missing checkpoint returns an empty Map', async (t) => {
+test('missing checkpoint returns empty state', async (t) => {
   const { path } = await fixture(t)
-  assert.deepEqual(await loadCheckpoint(path), new Map())
+  assert.deepEqual(await loadCheckpoint(path), { entries: new Map(), failures: new Map() })
 })
 
 test('checkpoint roundtrips sessions, revisions, empty records and safe integer boundaries', async (t) => {
@@ -58,10 +58,27 @@ test('checkpoint roundtrips sessions, revisions, empty records and safe integer 
   second.usage.records = []
   const expected = new Map([['session-a', first], ['session-b', second]])
   await saveCheckpoint(path, expected)
-  assert.deepEqual(await loadCheckpoint(path), expected)
+  assert.deepEqual(await loadCheckpoint(path), { entries: expected, failures: new Map() })
   const disk = JSON.parse(await readFile(path, 'utf8'))
-  assert.equal(disk.schemaVersion, 2)
+  assert.equal(disk.schemaVersion, 3)
   assert.equal(disk.entries.length, 2)
+  assert.deepEqual(disk.failures, [])
+})
+
+test('checkpoint roundtrips identities and persisted read failures', async (t) => {
+  const { path } = await fixture(t)
+  const entry = cached()
+  entry.identity = JSON.stringify(['revision-1', 4096, null])
+  const failure = { revision: 'revision-2', identity: JSON.stringify(['revision-2', 512, null]), retryAt: now + 60_000, attempts: 3 }
+  await saveCheckpoint(path, new Map([['session-a', entry]]), new Map([['session-b', failure]]))
+  const loaded = await loadCheckpoint(path)
+  assert.deepEqual(loaded, { entries: new Map([['session-a', entry]]), failures: new Map([['session-b', failure]]) })
+})
+
+test('a version 2 checkpoint still restores entries but carries no failures', async (t) => {
+  const { path } = await fixture(t)
+  await put(path, { schemaVersion: 2, entries: [['session-a', cached()]] })
+  assert.deepEqual(await loadCheckpoint(path), { entries: new Map([['session-a', cached()]]), failures: new Map() })
 })
 
 test('corrupt JSON is rejected without echoing its private contents', async (t) => {
@@ -81,14 +98,25 @@ test('incompatible versions and malformed checkpoint shapes are rejected', async
     null, [], {},
     { schemaVersion: 1, entries: [] },
     { schemaVersion: '1', entries: [] },
+    { schemaVersion: 3, entries: {} },
     { schemaVersion: 2, entries: {} },
-    { schemaVersion: 2, entries: [null] },
-    { schemaVersion: 2, entries: [['session-a']] },
-    { schemaVersion: 2, entries: [['session-a', cached(), 'extra']] },
-    { schemaVersion: 2, entries: [[3, cached()]] },
-    { schemaVersion: 2, entries: [['session-a', null]] },
-    { schemaVersion: 2, entries: [['session-a', []]] },
-    { schemaVersion: 2, entries: [['session-a', cached()], ['session-a', cached()]] },
+    { schemaVersion: 3, entries: [null] },
+    { schemaVersion: 3, entries: [['session-a']] },
+    { schemaVersion: 3, entries: [['session-a', cached(), 'extra']] },
+    { schemaVersion: 3, entries: [[3, cached()]] },
+    { schemaVersion: 3, entries: [['session-a', null]] },
+    { schemaVersion: 3, entries: [['session-a', []]] },
+    { schemaVersion: 3, entries: [['session-a', cached()], ['session-a', cached()]] },
+    { schemaVersion: 3, entries: [], failures: {} },
+    { schemaVersion: 3, entries: [], failures: [null] },
+    { schemaVersion: 3, entries: [], failures: [['session-a']] },
+    { schemaVersion: 3, entries: [], failures: [['session-a', { retryAt: now, attempts: 1 }]] },
+    { schemaVersion: 3, entries: [], failures: [['session-a', { revision: 'r', retryAt: now }]] },
+    { schemaVersion: 3, entries: [], failures: [['session-a', { revision: 'r', retryAt: now, attempts: -1 }]] },
+    { schemaVersion: 3, entries: [], failures: [['session-a', { revision: 'r', retryAt: now, attempts: 0.5 }]] },
+    { schemaVersion: 3, entries: [], failures: [['session-a', { revision: 'r', retryAt: 'soon', attempts: 1 }]] },
+    { schemaVersion: 3, entries: [], failures: [['session-a', { revision: 'r', identity: 3, retryAt: now, attempts: 1 }]] },
+    { schemaVersion: 3, entries: [], failures: [['session-a', { revision: 'r', retryAt: now, attempts: 1 }], ['session-a', { revision: 'r', retryAt: now, attempts: 1 }]] },
   ]
   for (const value of invalid) {
     await put(path, value)
@@ -101,6 +129,7 @@ test('loaded session and record fields are strictly validated', async (t) => {
   const changes = [
     (entry) => { entry.revision = 1 },
     (entry) => { delete entry.revision },
+    (entry) => { entry.identity = 3 },
     (entry) => { entry.usage = null },
     (entry) => { entry.usage = [] },
     (entry) => { entry.usage.sessionId = 'mismatch' },
@@ -152,13 +181,13 @@ test('load and save strip cwd and all extras without mutating callers', async (t
   // An untrusted toJSON must never be called during sanitized serialization.
   dirty.usage.toJSON = () => { throw new Error('must not serialize original') }
   await saveCheckpoint(path, new Map([['session-a', dirty]]))
-  assert.deepEqual(await loadCheckpoint(path), new Map([['session-a', expected]]))
+  assert.deepEqual((await loadCheckpoint(path)).entries, new Map([['session-a', expected]]))
   assert.doesNotMatch(await readFile(path, 'utf8'), /PRIVATE_PROMPT_CONTENT|private\/project|cwd|messages|metadata/)
   assert.equal(dirty.usage.cwd, '/private/project')
   assert.equal(dirty.usage.records[0].content, 'PRIVATE_PROMPT_CONTENT')
   delete dirty.usage.toJSON
-  await put(path, { schemaVersion: 2, prompt: 'PRIVATE_PROMPT_CONTENT', entries: [['session-a', dirty]] })
-  assert.deepEqual(await loadCheckpoint(path), new Map([['session-a', expected]]))
+  await put(path, { schemaVersion: 3, prompt: 'PRIVATE_PROMPT_CONTENT', entries: [['session-a', dirty]] })
+  assert.deepEqual((await loadCheckpoint(path)).entries, new Map([['session-a', expected]]))
 })
 
 test('new checkpoint directory is private and files remain private on overwrite', {
@@ -178,10 +207,10 @@ test('overwrite replaces the entire checkpoint and leaves no temporary files', a
   await saveCheckpoint(path, new Map([['session-a', cached()]]))
   const replacement = new Map([['session-b', cached('session-b')]])
   await saveCheckpoint(path, replacement)
-  assert.deepEqual(await loadCheckpoint(path), replacement)
+  assert.deepEqual((await loadCheckpoint(path)).entries, replacement)
   assert.deepEqual(await readdir(join(directory, 'private')), ['checkpoint.json'])
   await saveCheckpoint(path, new Map())
-  assert.deepEqual(await loadCheckpoint(path), new Map())
+  assert.deepEqual((await loadCheckpoint(path)).entries, new Map())
 })
 
 test('invalid saves reject without replacing the last good checkpoint', async (t) => {
@@ -202,7 +231,7 @@ test('invalid saves reject without replacing the last good checkpoint', async (t
   invalid.push(new Map([['session-a', record]]), new Map([['wrong-id', cached()]]))
   for (const entries of invalid) {
     await assert.rejects(saveCheckpoint(path, entries), /Invalid usage checkpoint/)
-    assert.deepEqual(await loadCheckpoint(path), expected)
+    assert.deepEqual((await loadCheckpoint(path)).entries, expected)
   }
 })
 
@@ -223,7 +252,7 @@ test('concurrent writers publish one complete checkpoint with unique temporary f
     return new Map([[id, cached(id)]])
   })
   await Promise.all(versions.map((entries) => saveCheckpoint(path, entries)))
-  const result = await loadCheckpoint(path)
+  const result = (await loadCheckpoint(path)).entries
   assert.equal(result.size, 1)
   const id = result.keys().next().value
   assert.deepEqual(result, versions[Number(id.slice('session-'.length))])

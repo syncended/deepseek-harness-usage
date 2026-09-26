@@ -5,11 +5,38 @@ import { basename, dirname, join } from 'node:path'
 import type { SessionUsage, UsageRecord } from './types.js'
 
 export interface CachedSession {
+  /** Source-qualified revision used for same-instance race confirmation. */
   revision: string
+  /**
+   * Cross-instance identity: the source-qualified revision combined with the
+   * physical measures the provider reports for the log. Only an entry whose
+   * identity matches a fresh listing may seed the projection after a restart,
+   * because provider revisions are promised comparable only within one service
+   * instance.
+   */
+  identity?: string
   usage: SessionUsage
 }
 
+export interface CachedFailure {
+  /** Source-qualified revision that was refused; a different revision is retried at once. */
+  revision: string
+  /** Identity of the unreadable log; absent when the provider reports no physical measures. */
+  identity?: string
+  /** Epoch milliseconds before which this identity must not be read again. */
+  retryAt: number
+  /** Consecutive failures for this revision, used to grow the retry delay. */
+  attempts: number
+}
+
+/** Disposable on-disk projection: confirmed sessions plus unreadable logs still being skipped. */
+export interface UsageCheckpoint {
+  entries: Map<string, CachedSession>
+  failures: Map<string, CachedFailure>
+}
+
 const MAX_DATE = 8_640_000_000_000_000
+const MAX_ATTEMPTS = 1_000_000
 
 function invalid(): never {
   // Do not include untrusted checkpoint contents in errors or logs.
@@ -33,6 +60,11 @@ function timestamp(value: unknown): number {
 
 function tokens(value: unknown): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) invalid()
+  return value
+}
+
+function attempts(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0 || value > MAX_ATTEMPTS) invalid()
   return value
 }
 
@@ -63,6 +95,7 @@ function sanitizeEntries(value: unknown): Map<string, CachedSession> {
     if (string(usage.sessionId) !== sessionId || !Array.isArray(usage.records)) invalid()
     entries.set(sessionId, {
       revision: string(cached.revision),
+      ...(cached.identity === undefined ? {} : { identity: string(cached.identity) }),
       usage: {
         sessionId,
         createdAt: timestamp(usage.createdAt),
@@ -74,12 +107,31 @@ function sanitizeEntries(value: unknown): Map<string, CachedSession> {
   return entries
 }
 
-export async function loadCheckpoint(path: string): Promise<Map<string, CachedSession>> {
+function sanitizeFailures(value: unknown): Map<string, CachedFailure> {
+  if (value === undefined) return new Map()
+  if (!Array.isArray(value)) invalid()
+  const failures = new Map<string, CachedFailure>()
+  for (const entry of value) {
+    if (!Array.isArray(entry) || entry.length !== 2) invalid()
+    const sessionId = string(entry[0])
+    if (failures.has(sessionId)) invalid()
+    const cached = object(entry[1])
+    failures.set(sessionId, {
+      revision: string(cached.revision),
+      ...(cached.identity === undefined ? {} : { identity: string(cached.identity) }),
+      retryAt: timestamp(cached.retryAt),
+      attempts: attempts(cached.attempts),
+    })
+  }
+  return failures
+}
+
+export async function loadCheckpoint(path: string): Promise<UsageCheckpoint> {
   let contents: string
   try {
     contents = await readFile(path, 'utf8')
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Map()
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { entries: new Map(), failures: new Map() }
     throw error
   }
   let parsed: unknown
@@ -91,15 +143,25 @@ export async function loadCheckpoint(path: string): Promise<Map<string, CachedSe
   }
   const checkpoint = object(parsed)
   // v1 omitted titles: accepting its revisions would prevent metadata backfill.
-  // The scanner treats incompatible checkpoints as a cold scan, not a fatal error.
-  if (checkpoint.schemaVersion !== 2) invalid()
-  return sanitizeEntries(checkpoint.entries)
+  // v2 predates physical-identity verification and persisted read failures, so it
+  // restores only through the legacy persistence path. The scanner treats
+  // incompatible checkpoints as a cold scan, not a fatal error.
+  if (checkpoint.schemaVersion !== 2 && checkpoint.schemaVersion !== 3) invalid()
+  return {
+    entries: sanitizeEntries(checkpoint.entries),
+    failures: checkpoint.schemaVersion === 3 ? sanitizeFailures(checkpoint.failures) : new Map(),
+  }
 }
 
-export async function saveCheckpoint(path: string, entries: ReadonlyMap<string, CachedSession>): Promise<void> {
+export async function saveCheckpoint(
+  path: string,
+  entries: ReadonlyMap<string, CachedSession>,
+  failures: ReadonlyMap<string, CachedFailure> = new Map(),
+): Promise<void> {
   // Validate and copy before touching disk; never serialize caller-owned objects.
   const sanitized = sanitizeEntries(Array.from(entries))
-  const contents = JSON.stringify({ schemaVersion: 2, entries: Array.from(sanitized) })
+  const confirmed = sanitizeFailures(Array.from(failures))
+  const contents = JSON.stringify({ schemaVersion: 3, entries: Array.from(sanitized), failures: Array.from(confirmed) })
   const directory = dirname(path)
   await mkdir(directory, { recursive: true, mode: 0o700 })
   const temporary = join(directory, `.${basename(path)}.${randomUUID()}.tmp`)

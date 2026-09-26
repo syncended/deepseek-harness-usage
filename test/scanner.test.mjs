@@ -61,7 +61,7 @@ test('persists confirmed projections and rereads only changed/new sessions acros
   assert.equal(scanner.status.initialized, true)
   assert.equal(scanner.status.pendingSessions, 0)
   assert.equal(scanner.sessions[0].cwd, undefined)
-  assert.equal((await loadCheckpoint(options.cachePath)).size, 3)
+  assert.equal((await loadCheckpoint(options.cachePath)).entries.size, 3)
   await scanner.refresh()
   assert.equal(persistence.reads.length, 3)
   const restored = new UsageScanner(options)
@@ -78,7 +78,7 @@ test('persists confirmed projections and rereads only changed/new sessions acros
   persistence.sessions.delete('0')
   await restored.refresh()
   assert.equal(tokens(restored), 35)
-  assert.equal((await loadCheckpoint(options.cachePath)).size, 2)
+  assert.equal((await loadCheckpoint(options.cachePath)).entries.size, 2)
 })
 
 test('legacy metadata-only renames invalidate projections and survive checkpoint restore', async (t) => {
@@ -129,7 +129,7 @@ test('startup runs without a Usage request, publishes/checkpoints batches and sh
     assert.equal(scanner.status.cachedSessions, 1)
     assert.equal(scanner.status.pendingSessions, 2)
     assert.equal(tokens(scanner), 10)
-    assert.equal((await loadCheckpoint(options.cachePath)).size, 1)
+    assert.equal((await loadCheckpoint(options.cachePath)).entries.size, 1)
   } finally { blocked.resolve() }
   await running
   assert.equal(tokens(scanner), 30)
@@ -319,4 +319,29 @@ test('service lifecycle warms in background and snapshots never wait for persist
   const reused = await service.snapshot('30d', 'UTC')
   assert.equal(reused.summary, ready.summary, 'unchanged aggregates are reused')
   assert.equal(persistence.reads.length, 1)
+})
+
+test('service defers the boot scan until the launcher commits successful startup', async (t) => {
+  const persistence = store()
+  let listed = 0
+  const list = persistence.listSnapshots
+  persistence.listSnapshots = async (...args) => { listed += 1; return list(...args) }
+  const listeners = []
+  const ctx = new Context()
+  ctx.provide('sessionPersistence', persistence)
+  ctx.provide('webServer', { register() { return () => {} } })
+  ctx.provide('appReady', { onReady(listener) { listeners.push(listener); return () => {} } })
+  const service = new UsageService(ctx, { cachePath: '', pricing: [] })
+  const init = service[Service.init]()
+  const { value: unregister } = await init.next()
+  const { value: cancel } = await init.next()
+  const { value: stop } = await init.next()
+  t.after(async () => { await stop(); cancel(); unregister() })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(listeners.length, 1, 'the scanner subscribes instead of starting')
+  assert.equal(listed, 0, 'no persistence work runs during bootstrap')
+  listeners[0]()
+  await service.scanner.refresh()
+  assert.ok(listed > 0, 'the committed signal starts indexing')
+  assert.equal(service.scanner.status.initialized, true)
 })

@@ -406,3 +406,14 @@ test('scan status marks partial totals, background updates, and generic failures
   assert.doesNotMatch(failedMarkup, /Usage unavailable/)
   assert.doesNotMatch(client, /snapshot\.generatedAt/)
 })
+
+test('unreadable sessions are reported without keeping partial-total polling', () => {
+  const { Dashboard, ScanStatus } = loadClient()
+  const scan = { initialized: true, refreshing: false, totalSessions: 10, cachedSessions: 2, pendingSessions: 0, unreadableSessions: 8, failed: false }
+  assert.equal(renderToStaticMarkup(React.createElement(ScanStatus, { scan })), '', 'backed-off sessions are not partial totals')
+  const snapshot = cachedSnapshot(scan)
+  snapshot.errors = 0
+  const markup = renderToStaticMarkup(React.createElement(Dashboard, { snapshot, range: '30d', metric: 'totalTokens' }))
+  assert.match(markup, /8 session logs could not be read/)
+  assert.doesNotMatch(markup, /Partial totals/)
+})

@@ -134,6 +134,8 @@ export interface UsageScanStatus {
   totalSessions: number
   cachedSessions: number
   pendingSessions: number
+  /** Sessions whose durable log the current scan could not read and is skipping with backoff. */
+  unreadableSessions: number
   failed: boolean
 }
 

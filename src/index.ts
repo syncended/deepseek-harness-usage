@@ -17,6 +17,14 @@ export * from './types.js'
 export const name = 'usage'
 const API_PREFIX = '/api/usage'
 
+// Structural contract for the launcher-owned successful-startup signal
+// (`@deepseek-ai/dsh-cmdline`). Optional: older Hosts never publish it, and the
+// scanner then starts immediately as before.
+interface AppReadySignal {
+  /** Run a listener once successful application startup is committed. */
+  onReady(listener: () => void): () => void
+}
+
 const UtcWindowSchema = z.object({
   days: z.array(z.number().min(0).max(6)).required(),
   startHour: z.number().min(0).max(23).required(),
@@ -88,7 +96,16 @@ export class UsageService extends Service {
       handler: createUsageHttpHandler(this, API_PREFIX, this.ctx.logger),
     })
     yield () => unregister()
-    this.scanner.start()
+    // Indexing is pure background work and must never compete with Host
+    // bootstrap: wait for the launcher's successful-startup signal when the Host
+    // publishes one, and start immediately on older Hosts that never signal it.
+    const ready = this.ctx.get('appReady') as AppReadySignal | undefined
+    if (ready !== undefined) {
+      const cancel = ready.onReady(() => { this.scanner.start() })
+      yield () => cancel()
+    } else {
+      this.scanner.start()
+    }
     yield () => this.scanner.stop()
   }
 
@@ -106,7 +123,8 @@ export class UsageService extends Service {
       if (this.aggregates.size >= 8) this.aggregates.delete(this.aggregates.keys().next().value!)
       this.aggregates.set(key, aggregate)
     }
-    return { ...aggregate, errors: this.scanner.errors, scan: this.scanner.status }
+    const scan = this.scanner.status
+    return { ...aggregate, errors: scan.unreadableSessions, scan }
   }
 }
 
